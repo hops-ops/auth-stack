@@ -108,15 +108,19 @@
 {{- $esoMasterkeyPath := $esoMasterkey.secretPath | default "" }}
 {{- $esoAdminPwd := $eso.adminPassword | default dict }}
 {{- $esoAdminPwdPath := $esoAdminPwd.secretPath | default "" }}
+{{- $esoIamAdminKey := $eso.iamAdminMachineKey | default dict }}
+{{- $esoIamAdminKeyPath := $esoIamAdminKey.secretPath | default "" }}
 {{- $esoIamAdminPat := $eso.iamAdminPat | default dict }}
 {{- $esoIamAdminPatPath := $esoIamAdminPat.secretPath | default "" }}
 {{- $esoLoginClientPat := $eso.loginClientPat | default dict }}
 {{- $esoLoginClientPatPath := $esoLoginClientPat.secretPath | default "" }}
 
 # K8s Secret names the chart expects + that the reconciler manages.
-# `iam-admin-pat` / `login-client` mirror the chart's sidecar-written names so
-# we can drop in without forking the chart.
+# `iam-admin` (machine key), `iam-admin-pat` (PAT), `login-client` (PAT) all
+# mirror what the chart's setup-job sidecars write so we can drop in without
+# forking the chart.
 {{- $adminPwdSecretName := "zitadel-admin-password" }}
+{{- $iamAdminKeySecretName := "iam-admin" }}
 {{- $iamAdminPatSecretName := "iam-admin-pat" }}
 {{- $loginClientPatSecretName := "login-client" }}
 
@@ -219,6 +223,10 @@
     "adminPassword" (dict
       "secretPath" $esoAdminPwdPath
       "secretName" $adminPwdSecretName
+    )
+    "iamAdminMachineKey" (dict
+      "secretPath" $esoIamAdminKeyPath
+      "secretName" $iamAdminKeySecretName
     )
     "iamAdminPat" (dict
       "secretPath" $esoIamAdminPatPath

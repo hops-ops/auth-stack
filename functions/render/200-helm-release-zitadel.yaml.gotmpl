@@ -80,10 +80,21 @@
 # When the reconciler is disabled, fall back to the chart-sidecar lifecycle
 # (legacy behavior — PAT expires at `patExpiration` and gets written to a
 # chart-managed Secret).
+#
+# MachineKey IS configured even when the reconciler is enabled: the iam-admin
+# JWT machine key is what the reconciler uses to authenticate. It's the
+# durable credential captured to AWS SM by PushSecret (see
+# `externalSecrets.iamAdminMachineKey`). The chart's MachineKey sidecar only
+# fires on the very first install (FirstInstance.Skip stays false there);
+# on re-installs the K8s Secret comes back via ExternalSecret projection.
 {{- $machineDict := dict
   "Machine" (dict
     "Username" $fi.iamAdmin.username
     "Name" "Automatically Initialized IAM Admin"
+  )
+  "MachineKey" (dict
+    "ExpirationDate" $fi.iamAdmin.patExpiration
+    "Type" 1
   )
 }}
 {{- $loginClientDict := dict

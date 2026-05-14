@@ -227,6 +227,20 @@ spec:
                       secretPath:
                         description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/admin-password`).
                         type: string
+                  iamAdminMachineKey:
+                    description: |
+                      ExternalSecret + PushSecret pair for the iam-admin service-account JWT
+                      machine key. This is the reconciler's primary credential (it signs a JWT
+                      with the private key and exchanges for an access token). On first install
+                      Zitadel's setup-job writes the K8s Secret `iam-admin` containing the JSON
+                      machine-key blob; PushSecret captures it to AWS SM at this path so re-
+                      installs can project it back. Remote AWS SM secret should contain a single
+                      string property keyed `key.json` carrying the raw machine-key JSON.
+                    type: object
+                    properties:
+                      secretPath:
+                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/iam-admin-key`).
+                        type: string
                   iamAdminPat:
                     description: |
                       ExternalSecret + PushSecret pair for the iam-admin service-account PAT.

@@ -59,10 +59,12 @@ spec:
         namespace: {{ $state.namespace }}
         labels: {{ $state.labels | toJson }}
       rules:
-      # Read the admin password (to authenticate against Zitadel).
+      # Read the iam-admin machine key (primary credential) + the human
+      # admin password (fallback) so the reconciler can authenticate.
       - apiGroups: [""]
         resources: ["secrets"]
         resourceNames:
+        - {{ $eso.iamAdminMachineKey.secretName }}
         - {{ $eso.adminPassword.secretName }}
         verbs: ["get"]
       # Read/write the operational PAT Secrets. `update` lets the
@@ -151,6 +153,10 @@ spec:
                   env:
                   - name: ZITADEL_BASE_URL
                     value: {{ printf "http://%s-zitadel.%s.svc.cluster.local:8080" $state.name $state.namespace | quote }}
+                  - name: TARGET_NAMESPACE
+                    value: {{ $state.namespace | quote }}
+                  - name: MACHINE_KEY_SECRET
+                    value: {{ $eso.iamAdminMachineKey.secretName | quote }}
                   - name: ZITADEL_ADMIN_USERNAME
                     value: "zitadel-admin"
                   - name: ZITADEL_ADMIN_PASSWORD_SECRET
@@ -163,8 +169,6 @@ spec:
                     value: {{ $eso.loginClientPat.secretName | quote }}
                   - name: LOGIN_CLIENT_USERNAME
                     value: {{ $state.firstInstance.loginClient.username | quote }}
-                  - name: TARGET_NAMESPACE
-                    value: {{ $state.namespace | quote }}
                   resources:
                     requests:
                       cpu: "10m"
