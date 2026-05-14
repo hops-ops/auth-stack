@@ -132,7 +132,8 @@
   # can't authenticate; we won't render a Job that's guaranteed to fail).
   {{- $recEnabled = true }}
 {{- end }}
-{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:latest" }}
+{{- /* Bump this in lockstep with releases of hops-ops/authstack-reconciler. */}}
+{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:v0.0.1" }}
 {{- $recSchedule := $rec.schedule | default "*/5 * * * *" }}
 
 # ==============================================================================
