@@ -1,0 +1,246 @@
+# code: language=yaml
+#
+# Initialize $state with spec defaults and validate one-of database mode.
+#
+
+{{- $xr := getCompositeResource . }}
+{{- $spec := $xr.spec | default dict }}
+{{- $metadata := $xr.metadata | default dict }}
+
+# ==============================================================================
+# Core defaults
+# ==============================================================================
+{{- $name := $metadata.name | default "auth" }}
+{{- $clusterName := $spec.clusterName | default $name }}
+{{- $namespace := $spec.namespace | default "zitadel" }}
+{{- $managementPolicies := $spec.managementPolicies | default (list "*") }}
+
+# Default labels
+{{- $defaultLabels := dict
+  "hops.ops.com.ai/managed" "true"
+  (printf "hops.ops.com.ai/%s" (lower $xr.kind)) $name
+}}
+{{- $labels := merge $defaultLabels ($spec.labels | default dict) }}
+
+# Helm provider config (defaults to clusterName)
+{{- $helmProviderConfigRef := $spec.helmProviderConfigRef | default dict }}
+{{- $helmProviderConfigRef = dict
+  "name" ($helmProviderConfigRef.name | default $clusterName)
+  "kind" ($helmProviderConfigRef.kind | default "ProviderConfig")
+}}
+
+# Kubernetes provider config (defaults to clusterName)
+{{- $k8sProviderConfigRef := $spec.kubernetesProviderConfigRef | default dict }}
+{{- $k8sProviderConfigRef = dict
+  "name" ($k8sProviderConfigRef.name | default $clusterName)
+  "kind" ($k8sProviderConfigRef.kind | default "ProviderConfig")
+}}
+
+# ==============================================================================
+# FirstInstance defaults — chart defaults reproduced so status projection knows
+# where to look for chart-managed secrets without re-reading the chart.
+# ==============================================================================
+{{- $fi := $spec.firstInstance | default dict }}
+{{- $fiEnabled := true }}
+{{- if hasKey $fi "enabled" }}
+  {{- $fiEnabled = $fi.enabled }}
+{{- end }}
+{{- $fiOrg := $fi.org | default "ZITADEL" }}
+
+{{- $iamAdmin := $fi.iamAdmin | default dict }}
+{{- $iamAdminUsername := $iamAdmin.username | default "iam-admin" }}
+{{- $iamAdminPatExpiration := $iamAdmin.patExpiration | default "2029-01-01T00:00:00Z" }}
+
+{{- $loginClient := $fi.loginClient | default dict }}
+{{- $loginClientUsername := $loginClient.username | default "login-client" }}
+{{- $loginClientPatExpiration := $loginClient.patExpiration | default "2029-01-01T00:00:00Z" }}
+
+# Masterkey — exactly one of secretRef / inline.
+{{- $mk := $fi.masterkey | default dict }}
+{{- $mkSecretRef := $mk.secretRef | default dict }}
+{{- $mkInline := $mk.inline | default "" }}
+{{- $mkSecretName := $mkSecretRef.name | default "" }}
+
+{{- $mkModes := list }}
+{{- if $mkSecretName }}{{- $mkModes = append $mkModes "secretRef" }}{{- end }}
+{{- if $mkInline }}{{- $mkModes = append $mkModes "inline" }}{{- end }}
+{{- $mkMode := "" }}
+{{- if eq (len $mkModes) 1 }}
+  {{- $mkMode = index $mkModes 0 }}
+{{- end }}
+
+# ==============================================================================
+# Database — one-of psqlClusterRef / external.
+# ==============================================================================
+{{- $db := $spec.database | default dict }}
+{{- $dbPsql := $db.psqlClusterRef | default dict }}
+{{- $dbExternal := $db.external | default dict }}
+
+{{- $dbModes := list }}
+{{- if $dbPsql }}{{- $dbModes = append $dbModes "psqlClusterRef" }}{{- end }}
+{{- if $dbExternal }}{{- $dbModes = append $dbModes "external" }}{{- end }}
+{{- $dbMode := "" }}
+{{- if eq (len $dbModes) 1 }}{{- $dbMode = index $dbModes 0 }}{{- end }}
+
+# psqlClusterRef defaults
+# psqlClusterRef.namespace defaults to the AuthStack XR's own namespace (where
+# the PSQLCluster typically lives), NOT the Zitadel install namespace ($namespace
+# = "zitadel"). The chart install ns and the database ns are independent.
+{{- $psqlName := $dbPsql.name | default "" }}
+{{- $psqlNamespace := $dbPsql.namespace | default ($metadata.namespace | default "default") }}
+{{- $psqlSslMode := $dbPsql.sslMode | default "disable" }}
+{{- $psqlHost := "" }}
+{{- if $psqlName }}{{- $psqlHost = printf "%s-rw.%s.svc.cluster.local" $psqlName $psqlNamespace }}{{- end }}
+
+# external dsnSecretRef defaults
+{{- $dsnRef := $dbExternal.dsnSecretRef | default dict }}
+{{- $dsnRefName := $dsnRef.name | default "" }}
+{{- $dsnRefNamespace := $dsnRef.namespace | default $namespace }}
+{{- $dsnRefKey := $dsnRef.key | default "dsn" }}
+
+# ==============================================================================
+# ExternalSecrets integration
+# ==============================================================================
+{{- $eso := $spec.externalSecrets | default dict }}
+{{- $esoEnabled := $eso.enabled | default false }}
+{{- $esoStoreName := $eso.secretStoreName | default "hops-aws-secrets-manager" }}
+{{- $esoMasterkey := $eso.masterkey | default dict }}
+{{- $esoMasterkeyPath := $esoMasterkey.secretPath | default "" }}
+{{- $esoAdminPwd := $eso.adminPassword | default dict }}
+{{- $esoAdminPwdPath := $esoAdminPwd.secretPath | default "" }}
+{{- $esoIamAdminPat := $eso.iamAdminPat | default dict }}
+{{- $esoIamAdminPatPath := $esoIamAdminPat.secretPath | default "" }}
+{{- $esoLoginClientPat := $eso.loginClientPat | default dict }}
+{{- $esoLoginClientPatPath := $esoLoginClientPat.secretPath | default "" }}
+
+# K8s Secret names the chart expects + that the reconciler manages.
+# `iam-admin-pat` / `login-client` mirror the chart's sidecar-written names so
+# we can drop in without forking the chart.
+{{- $adminPwdSecretName := "zitadel-admin-password" }}
+{{- $iamAdminPatSecretName := "iam-admin-pat" }}
+{{- $loginClientPatSecretName := "login-client" }}
+
+# ==============================================================================
+# Reconciler CronJob defaults
+# ==============================================================================
+{{- $rec := $spec.reconciler | default dict }}
+{{- $recEnabled := false }}
+{{- if hasKey $rec "enabled" }}
+  {{- $recEnabled = $rec.enabled }}
+{{- else if $esoAdminPwdPath }}
+  # Default-on when adminPassword is configured (without it the reconciler
+  # can't authenticate; we won't render a Job that's guaranteed to fail).
+  {{- $recEnabled = true }}
+{{- end }}
+{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:latest" }}
+{{- $recSchedule := $rec.schedule | default "*/5 * * * *" }}
+
+# ==============================================================================
+# Gateway routing
+# ==============================================================================
+{{- $gw := $spec.gateway | default dict }}
+{{- $gwEnabled := $gw.enabled | default false }}
+{{- $gwParentRef := $gw.parentRef | default dict }}
+
+# ==============================================================================
+# Chart values escape hatches
+# ==============================================================================
+{{- $chartValues := $spec.chartValues | default dict }}
+{{- $overrideAllValues := $spec.overrideAllValues | default dict }}
+
+# Chart version pin
+{{- $chartVersion := $spec.version | default "9.34.1" }}
+
+# Domain & TLS
+{{- $domain := $spec.domain | default "" }}
+{{- $externalSecure := true }}
+{{- if hasKey $spec "externalSecure" }}
+  {{- $externalSecure = $spec.externalSecure }}
+{{- end }}
+
+# ==============================================================================
+# Initialize $state
+# ==============================================================================
+{{- $state := dict
+  "name" $name
+  "clusterName" $clusterName
+  "namespace" $namespace
+  "managementPolicies" $managementPolicies
+  "labels" $labels
+  "helmProviderConfigRef" $helmProviderConfigRef
+  "kubernetesProviderConfigRef" $k8sProviderConfigRef
+  "domain" $domain
+  "externalSecure" $externalSecure
+  "chartVersion" $chartVersion
+  "chartValues" $chartValues
+  "overrideAllValues" $overrideAllValues
+  "firstInstance" (dict
+    "enabled" $fiEnabled
+    "org" $fiOrg
+    "masterkey" (dict
+      "mode" $mkMode
+      "secretName" $mkSecretName
+      "inline" $mkInline
+    )
+    "iamAdmin" (dict
+      "username" $iamAdminUsername
+      "patExpiration" $iamAdminPatExpiration
+    )
+    "loginClient" (dict
+      "username" $loginClientUsername
+      "patExpiration" $loginClientPatExpiration
+    )
+  )
+  "database" (dict
+    "mode" $dbMode
+    "psqlClusterRef" (dict
+      "name" $psqlName
+      "namespace" $psqlNamespace
+      "host" $psqlHost
+      "port" 5432
+      "database" "app"
+      "sslMode" $psqlSslMode
+      "appSecretName" (printf "%s-app" $psqlName)
+      "superuserSecretName" (printf "%s-superuser" $psqlName)
+    )
+    "external" (dict
+      "dsnSecretRef" (dict
+        "name" $dsnRefName
+        "namespace" $dsnRefNamespace
+        "key" $dsnRefKey
+      )
+    )
+  )
+  "externalSecrets" (dict
+    "enabled" $esoEnabled
+    "secretStoreName" $esoStoreName
+    "masterkey" (dict "secretPath" $esoMasterkeyPath)
+    "adminPassword" (dict
+      "secretPath" $esoAdminPwdPath
+      "secretName" $adminPwdSecretName
+    )
+    "iamAdminPat" (dict
+      "secretPath" $esoIamAdminPatPath
+      "secretName" $iamAdminPatSecretName
+    )
+    "loginClientPat" (dict
+      "secretPath" $esoLoginClientPatPath
+      "secretName" $loginClientPatSecretName
+    )
+  )
+  "reconciler" (dict
+    "enabled" $recEnabled
+    "image" $recImage
+    "schedule" $recSchedule
+  )
+  "gateway" (dict
+    "enabled" $gwEnabled
+    "parentRef" (dict
+      "name" ($gwParentRef.name | default "")
+      "namespace" ($gwParentRef.namespace | default "")
+      "sectionName" ($gwParentRef.sectionName | default "")
+    )
+  )
+  "observed" (dict)
+  "status" (dict)
+}}

@@ -1,0 +1,34 @@
+apiVersion: meta.dev.upbound.io/v2alpha1
+kind: Project
+metadata:
+  name: auth-stack
+spec:
+  dependsOn:
+  - apiVersion: pkg.crossplane.io/v1
+    kind: Function
+    package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
+    version: '>=v0.6.3'
+  - apiVersion: pkg.crossplane.io/v1
+    kind: Provider
+    package: xpkg.crossplane.io/crossplane-contrib/provider-helm
+    version: '>=v1'
+  - apiVersion: pkg.crossplane.io/v1
+    kind: Provider
+    package: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes
+    version: '>=v1'
+  description: AuthStack installs Zitadel as the platform identity provider via the
+    upstream Helm chart, with typed integration points for PostgreSQL and Gateway
+    API.
+  license: Apache-2.0
+  maintainer: Patrick Lee Scott <pat@patscott.io>
+  readme: |
+    # auth-stack
+
+    Installs Zitadel into a Kubernetes cluster as the platform identity
+    provider. Wraps the upstream `zitadel/zitadel` Helm chart with a typed
+    XRD surface that handles database wiring (external DSN or bundled
+    Bitnami subchart for local dev), Gateway API routing, and re-projects
+    the chart-managed bootstrap secrets (admin PAT, login-client PAT) into
+    XR status for downstream consumers.
+  repository: ghcr.io/hops-ops/auth-stack
+  source: github.com/hops-ops/auth-stack

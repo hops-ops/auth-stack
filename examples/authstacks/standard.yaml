@@ -1,0 +1,24 @@
+apiVersion: hops.ops.com.ai/v1alpha1
+kind: AuthStack
+metadata:
+  name: auth
+  namespace: example-env
+spec:
+  clusterName: example-cluster
+  domain: auth.example.com
+  externalSecure: true
+  firstInstance:
+    org: hops-ops
+    masterkey:
+      secretRef:
+        name: zitadel-masterkey
+  database:
+    external:
+      dsnSecretRef:
+        name: zitadel-db
+        key: dsn
+  gateway:
+    enabled: true
+    parentRef:
+      name: platform-gateway
+      namespace: istio-system

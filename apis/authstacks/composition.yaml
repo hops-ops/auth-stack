@@ -1,0 +1,16 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: authstacks.hops.ops.com.ai
+spec:
+  compositeTypeRef:
+    apiVersion: hops.ops.com.ai/v1alpha1
+    kind: AuthStack
+  mode: Pipeline
+  pipeline:
+  - functionRef:
+      name: hops-ops-auth-stackrender
+    step: render
+  - functionRef:
+      name: crossplane-contrib-function-auto-ready
+    step: crossplane-contrib-function-auto-ready

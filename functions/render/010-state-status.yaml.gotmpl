@@ -1,0 +1,80 @@
+# code: language=yaml
+#
+# Extract observed state and compute status.
+#
+# The chart's setup hook writes machine-user PATs to chart-managed Secrets:
+#   - <iamAdmin.username>             — JWT machine key
+#   - <iamAdmin.username>-pat         — PAT
+#   - <loginClient.username>          — login-client PAT
+# The stack does not author these Secrets; it just publishes their refs in
+# status so downstream consumers (e.g. the Zitadel Crossplane provider) have
+# a stable contract.
+#
+
+{{- $observed := $.observed.resources | default dict }}
+
+# ==============================================================================
+# Helm release readiness
+# ==============================================================================
+{{- $relEntry := get $observed "helm-release-zitadel" | default dict }}
+{{- $relResource := $relEntry.resource | default dict }}
+{{- $relStatus := $relResource.status | default dict }}
+{{- $relReady := false }}
+{{- range ($relStatus.conditions | default list) }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}
+    {{- $relReady = true }}
+  {{- end }}
+{{- end }}
+
+{{- $state = set $state "observed" (dict
+  "helmRelease" (dict "ready" $relReady)
+) }}
+
+# ==============================================================================
+# OIDC endpoints
+# ==============================================================================
+{{- $scheme := "http" }}
+{{- if $state.externalSecure }}{{- $scheme = "https" }}{{- end }}
+{{- $issuer := "" }}
+{{- $discovery := "" }}
+{{- if $state.domain }}
+  {{- $issuer = printf "%s://%s" $scheme $state.domain }}
+  {{- $discovery = printf "%s/.well-known/openid-configuration" $issuer }}
+{{- end }}
+
+# ==============================================================================
+# Bootstrap secret refs (chart-managed)
+# ==============================================================================
+{{- $fi := $state.firstInstance }}
+{{- $bootstrap := dict }}
+{{- if $fi.enabled }}
+  {{- $bootstrap = dict
+    "iamAdminPatSecretRef" (dict
+      "name" (printf "%s-pat" $fi.iamAdmin.username)
+      "namespace" $state.namespace
+      "key" "pat"
+    )
+    "iamAdminKeySecretRef" (dict
+      "name" $fi.iamAdmin.username
+      "namespace" $state.namespace
+      "key" "key"
+    )
+    "loginClientPatSecretRef" (dict
+      "name" $fi.loginClient.username
+      "namespace" $state.namespace
+      "key" "pat"
+    )
+  }}
+{{- end }}
+
+# ==============================================================================
+# Compute status (function-auto-ready computes the `ready` boolean)
+# ==============================================================================
+{{- $state = set $state "status" (dict
+  "ready" false
+  "oidc" (dict
+    "issuerURL" $issuer
+    "discoveryURL" $discovery
+  )
+  "bootstrap" $bootstrap
+) }}

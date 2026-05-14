@@ -1,0 +1,16 @@
+apiVersion: meta.pkg.crossplane.io/v1alpha1
+kind: Configuration
+metadata:
+  name: auth-stack
+  annotations:
+    meta.crossplane.io/maintainer: Patrick Lee Scott
+    meta.crossplane.io/source: github.com/hops-ops/auth-stack
+    meta.crossplane.io/description: AuthStack installs Zitadel as the platform identity provider via the upstream Helm chart, with typed integration points for PostgreSQL and Gateway API.
+spec:
+  dependsOn:
+  - function: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
+    version: '>=v0.6.3'
+  - provider: xpkg.crossplane.io/crossplane-contrib/provider-helm
+    version: '>=v1'
+  - provider: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes
+    version: '>=v1'

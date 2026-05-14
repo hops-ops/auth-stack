@@ -1,0 +1,54 @@
+name: on-pr
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - labeled
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - ".github/workflows/on-pr.yaml"
+      - ".gitops/**"
+      - "apis/**"
+      - "examples/**"
+      - "tests/**"
+      - "functions/**"
+      - "upbound.yaml"
+
+permissions:
+  packages: write
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  validate:
+    uses: unbounded-tech/workflows-crossplane/.github/workflows/validate.yaml@v2.20.0
+    with:
+      examples: |
+        [
+          { "example": "examples/authstacks/minimal.yaml" },
+          { "example": "examples/authstacks/standard.yaml" },
+          { "example": "examples/authstacks/local-colima.yaml" }
+        ]
+      api_path: apis/authstacks
+      error_on_missing_schemas: true
+
+  test:
+    uses: unbounded-tech/workflows-crossplane/.github/workflows/test.yaml@v2.20.0
+
+  e2e:
+    uses: unbounded-tech/workflows-crossplane/.github/workflows/e2e.yaml@v2.20.0
+
+  publish:
+    needs:
+      - validate
+      - test
+    uses: unbounded-tech/workflows-crossplane/.github/workflows/publish.yaml@v2.20.0
+    secrets: inherit
+    with:
+      tag: pr-${{ github.event.pull_request.number }}-${{ github.sha }}

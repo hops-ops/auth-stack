@@ -1,0 +1,355 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: authstacks.hops.ops.com.ai
+spec:
+  group: hops.ops.com.ai
+  names:
+    kind: AuthStack
+    plural: authstacks
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    referenceable: true
+    served: true
+    schema:
+      openAPIV3Schema:
+        description: |
+          AuthStack installs Zitadel as the platform identity provider via the
+          upstream `zitadel/zitadel` Helm chart. The chart's setup hook owns
+          instance bootstrap (creates the default org plus `iam-admin` and
+          `login-client` machine users with PATs in chart-managed secrets);
+          this stack re-projects those secret references and the OIDC issuer
+          URL into XR status so downstream consumers have a stable contract.
+
+          Database modes (mutually exclusive):
+            * `external` — bring your own DSN secret (managed Postgres, RDS, etc.)
+            * `bundled`  — chart's bundled Bitnami subchart (LOCAL DEV ONLY)
+            * `psqlStack` — compose with PSQLStack (RESERVED — pending PSQLDatabase XRD;
+              currently rejected at composition time)
+
+          Per-app OIDC client provisioning is out of scope; that lives with
+          the Zitadel API or the future Zitadel Crossplane provider.
+        type: object
+        properties:
+          spec:
+            description: AuthStackSpec defines the desired state.
+            type: object
+            properties:
+              clusterName:
+                description: Name of the target cluster. Used as default for provider config refs.
+                type: string
+              managementPolicies:
+                description: Management policies for all composed resources. Defaults to ["*"].
+                type: array
+                items:
+                  type: string
+                default:
+                - "*"
+              labels:
+                description: Custom labels applied to all managed resources.
+                type: object
+                additionalProperties:
+                  type: string
+                x-kubernetes-preserve-unknown-fields: true
+              helmProviderConfigRef:
+                description: Reference to the Helm ProviderConfig. Defaults to clusterName.
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    enum:
+                    - ProviderConfig
+                    - ClusterProviderConfig
+              kubernetesProviderConfigRef:
+                description: Reference to the Kubernetes ProviderConfig for namespace and bootstrap secret projection. Defaults to clusterName.
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    enum:
+                    - ProviderConfig
+                    - ClusterProviderConfig
+              namespace:
+                description: Namespace for the Zitadel install. Defaults to "zitadel".
+                type: string
+              version:
+                description: Zitadel Helm chart version. Defaults to the platform-pinned version.
+                type: string
+              domain:
+                description: External hostname (e.g. "auth.example.com"). Drives chart externalDomain, ingress/HTTPRoute hostnames, and the OIDC issuer URL.
+                type: string
+              externalSecure:
+                description: Whether the external endpoint terminates TLS. True for production (behind a TLS-terminating proxy/gateway). False only for local-dev clusters without TLS at the edge.
+                type: boolean
+                default: true
+              firstInstance:
+                description: Bootstrap configuration for the initial Zitadel instance. The chart's setup hook creates the default org plus iam-admin and login-client machine users with PATs in chart-managed secrets; this stack projects those refs into status.bootstrap.
+                type: object
+                properties:
+                  enabled:
+                    description: Run the chart's FirstInstance bootstrap. Defaults to true. Set false for "join existing instance" cases.
+                    type: boolean
+                    default: true
+                  org:
+                    description: Default organization name. Defaults to "ZITADEL" (chart default).
+                    type: string
+                  masterkey:
+                    description: |
+                      32-character symmetric encryption key for at-rest crypto. Required by the
+                      chart on first install (it hard-fails without one). Set exactly one of
+                      `secretRef` (production) or `inline` (dev only). Losing this key bricks the
+                      install — back it up.
+                    type: object
+                    properties:
+                      secretRef:
+                        description: Reference to a Kubernetes Secret holding the masterkey. Wires to chart `zitadel.masterkeySecretName`. Mutually exclusive with `inline`.
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                      inline:
+                        description: 32-character masterkey value. Dev only — leaks the key into the XR. Mutually exclusive with `secretRef`.
+                        type: string
+                  iamAdmin:
+                    description: IAM admin machine user.
+                    type: object
+                    properties:
+                      username:
+                        description: Username. Defaults to "iam-admin".
+                        type: string
+                      patExpiration:
+                        description: PAT expiration timestamp (RFC 3339). Defaults to "2029-01-01T00:00:00Z" (chart default).
+                        type: string
+                  loginClient:
+                    description: Login client machine user.
+                    type: object
+                    properties:
+                      username:
+                        description: Username. Defaults to "login-client".
+                        type: string
+                      patExpiration:
+                        description: PAT expiration timestamp (RFC 3339). Defaults to "2029-01-01T00:00:00Z" (chart default).
+                        type: string
+                required:
+                - masterkey
+              database:
+                description: |
+                  Database backend for Zitadel. Set exactly one of `psqlClusterRef`
+                  (compose with a PSQLCluster on this cluster) or `external`
+                  (BYO DSN — managed Postgres, RDS, etc.).
+                type: object
+                properties:
+                  psqlClusterRef:
+                    description: |
+                      Reference to a `PSQLCluster` XR. AuthStack wires Zitadel's individual
+                      Postgres env vars (host/port/database/user+password/admin+password)
+                      from the PSQLCluster's chart-managed Secrets — no DSN string round-trip.
+                      Convention: host = `<name>-rw.<namespace>.svc.cluster.local`, port 5432,
+                      database = `app`. App credentials are read from `<name>-app`, admin
+                      credentials from `<name>-superuser`.
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        description: Namespace of the PSQLCluster. Defaults to the AuthStack namespace.
+                        type: string
+                      sslMode:
+                        description: SSL mode for the connection. Defaults to "disable" (in-cluster).
+                        type: string
+                        enum:
+                        - disable
+                        - allow
+                        - prefer
+                        - require
+                        - verify-ca
+                        - verify-full
+                    required:
+                    - name
+                  external:
+                    description: Bring your own connection. Provide a Secret containing the Postgres DSN.
+                    type: object
+                    properties:
+                      dsnSecretRef:
+                        description: Reference to a Secret containing the Postgres DSN. The chart reads ZITADEL_DATABASE_POSTGRES_DSN from this secret.
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            description: Namespace of the secret. Defaults to the AuthStack namespace.
+                            type: string
+                          key:
+                            description: Key in the secret containing the DSN. Defaults to "dsn".
+                            type: string
+                        required:
+                        - name
+                    required:
+                    - dsnSecretRef
+              externalSecrets:
+                description: |
+                  ExternalSecrets Operator integration. When enabled, AuthStack composes
+                  `ExternalSecret` resources that pull values from the platform secret store
+                  (typically AWS Secrets Manager via `hops-aws-secrets-manager`) into the
+                  K8s Secrets the chart consumes. Pairs with the `hops secrets` pipeline:
+                  engineer authors plaintext, SOPS-encrypts, runs `hops secrets sync aws`,
+                  and ESO does the rest.
+                type: object
+                properties:
+                  enabled:
+                    description: Enable ExternalSecret composition. Defaults to false (user manages Secrets directly).
+                    type: boolean
+                  secretStoreName:
+                    description: Name of the ClusterSecretStore created by the platform's secret-stack. Defaults to "hops-aws-secrets-manager".
+                    type: string
+                  masterkey:
+                    description: ExternalSecret for the Zitadel masterkey. The remote AWS SM secret should contain a single string property keyed `masterkey`.
+                    type: object
+                    properties:
+                      secretPath:
+                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/masterkey`).
+                        type: string
+                  adminPassword:
+                    description: |
+                      ExternalSecret for the human admin (`zitadel-admin`) password. The
+                      reconciler authenticates as this user via OAuth password grant to mint
+                      PATs against existing service accounts. Remote AWS SM secret should
+                      contain a single string property keyed `password`.
+                    type: object
+                    properties:
+                      secretPath:
+                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/admin-password`).
+                        type: string
+                  iamAdminPat:
+                    description: |
+                      ExternalSecret + PushSecret pair for the iam-admin service-account PAT.
+                      AWS SM is captured-not-source: on first install the reconciler mints a
+                      PAT and PushSecret writes it up; on re-installs ExternalSecret projects
+                      it back. The reconciler validates and re-mints if invalid (e.g. after
+                      DB restore the captured value is stale). Remote AWS SM secret should
+                      contain a single string property keyed `pat`.
+                    type: object
+                    properties:
+                      secretPath:
+                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/iam-admin-pat`).
+                        type: string
+                  loginClientPat:
+                    description: |
+                      ExternalSecret + PushSecret pair for the login-client service-account PAT.
+                      Same capture-and-restore lifecycle as `iamAdminPat`. Required by the
+                      login UI pod's volume mount. Remote AWS SM secret should contain a
+                      single string property keyed `pat`.
+                    type: object
+                    properties:
+                      secretPath:
+                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/login-client`).
+                        type: string
+              reconciler:
+                description: |
+                  In-cluster CronJob that mints and validates the operational PATs
+                  (iam-admin, login-client) against an existing Zitadel install. Idempotent:
+                  no-ops when in-cluster PATs are valid; mints fresh ones when missing or
+                  invalid (e.g. after AuthStack delete/recreate or DB restore). Pairs with
+                  `externalSecrets.{iamAdminPat,loginClientPat}` for capture-to-AWS-SM.
+                  Requires `externalSecrets.adminPassword.secretPath` to be set so the
+                  reconciler can authenticate.
+                type: object
+                properties:
+                  enabled:
+                    description: Enable the reconciler CronJob. Defaults to true when adminPassword is configured.
+                    type: boolean
+                  image:
+                    description: Container image for the reconciler. Defaults to the latest published `ghcr.io/hops-ops/authstack-reconciler`.
+                    type: string
+                  schedule:
+                    description: Cron schedule for the reconciler. Defaults to `*/5 * * * *`.
+                    type: string
+              gateway:
+                description: Gateway API routing for the Zitadel install. When enabled, drives the chart's gateway.httpRoute and gateway.grpcRoute. When disabled, the chart's ClusterIP service is left for the consumer to wire.
+                type: object
+                properties:
+                  enabled:
+                    description: Render Gateway API routes. Defaults to false.
+                    type: boolean
+                  parentRef:
+                    description: Gateway parentRef to attach the routes to.
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      sectionName:
+                        type: string
+              chartValues:
+                description: Escape hatch — Helm values merged on top of stack-rendered values. Prefer typed top-level fields when a knob proves load-bearing.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              overrideAllValues:
+                description: Helm values that replace all stack-rendered defaults. Use only when the stack's typed surface gets in your way.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+            required:
+            - clusterName
+            - domain
+            - database
+          status:
+            description: AuthStackStatus surfaces the OIDC contract and chart-managed bootstrap secret refs.
+            type: object
+            properties:
+              ready:
+                description: Overall readiness of the auth stack.
+                type: boolean
+              oidc:
+                description: OIDC endpoints downstream consumers wire to.
+                type: object
+                properties:
+                  issuerURL:
+                    description: OIDC issuer URL (e.g. https://auth.example.com).
+                    type: string
+                  discoveryURL:
+                    description: OIDC discovery URL (issuer + /.well-known/openid-configuration).
+                    type: string
+              bootstrap:
+                description: References to chart-managed bootstrap secrets. Populated after the chart's setup hook completes.
+                type: object
+                properties:
+                  iamAdminPatSecretRef:
+                    description: Secret holding the iam-admin machine-user PAT. Consumed by the Zitadel Crossplane provider and by ad-hoc admin tooling.
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      key:
+                        type: string
+                  iamAdminKeySecretRef:
+                    description: Secret holding the iam-admin machine-user JWT key.
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      key:
+                        type: string
+                  loginClientPatSecretRef:
+                    description: Secret holding the login-client machine-user PAT.
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      key:
+                        type: string
+        required:
+        - spec

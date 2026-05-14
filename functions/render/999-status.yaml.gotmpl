@@ -1,0 +1,30 @@
+# code: language=yaml
+#
+# Output XR status
+#
+
+{{- $xr := getCompositeResource . }}
+{{- $s := $state.status }}
+---
+apiVersion: {{ $xr.apiVersion }}
+kind: {{ $xr.kind }}
+status:
+  ready: {{ $s.ready }}
+  oidc:
+    issuerURL: {{ $s.oidc.issuerURL | quote }}
+    discoveryURL: {{ $s.oidc.discoveryURL | quote }}
+  {{- if $s.bootstrap }}
+  bootstrap:
+    iamAdminPatSecretRef:
+      name: {{ $s.bootstrap.iamAdminPatSecretRef.name }}
+      namespace: {{ $s.bootstrap.iamAdminPatSecretRef.namespace }}
+      key: {{ $s.bootstrap.iamAdminPatSecretRef.key }}
+    iamAdminKeySecretRef:
+      name: {{ $s.bootstrap.iamAdminKeySecretRef.name }}
+      namespace: {{ $s.bootstrap.iamAdminKeySecretRef.namespace }}
+      key: {{ $s.bootstrap.iamAdminKeySecretRef.key }}
+    loginClientPatSecretRef:
+      name: {{ $s.bootstrap.loginClientPatSecretRef.name }}
+      namespace: {{ $s.bootstrap.loginClientPatSecretRef.namespace }}
+      key: {{ $s.bootstrap.loginClientPatSecretRef.key }}
+  {{- end }}

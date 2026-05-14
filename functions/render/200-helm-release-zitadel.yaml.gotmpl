@@ -1,0 +1,242 @@
+# code: language=yaml
+#
+# Helm Release: Zitadel
+#
+# Stack-rendered values cover the typed XRD surface (domain, externalSecure,
+# database mode, FirstInstance bootstrap, gateway routing). Chart defaults
+# remain authoritative for everything we don't surface; users can layer
+# overrides via spec.chartValues, or replace the whole tree via
+# spec.overrideAllValues.
+#
+
+{{- $db := $state.database }}
+{{- $fi := $state.firstInstance }}
+{{- $mk := $fi.masterkey }}
+{{- $gw := $state.gateway }}
+
+# Validate one-of: masterkey
+{{- if eq $mk.mode "" }}
+  {{- fail "spec.firstInstance.masterkey must set exactly one of: secretRef, inline" }}
+{{- end }}
+
+# Validate one-of: database
+{{- if eq $db.mode "" }}
+  {{- fail "spec.database must set exactly one of: psqlClusterRef, external" }}
+{{- end }}
+
+# Build database env vars and configmapConfig.Database fragment based on mode.
+{{- $dbEnv := list }}
+{{- $dbConfig := dict }}
+{{- if eq $db.mode "psqlClusterRef" }}
+  {{- $p := $db.psqlClusterRef }}
+  # PSQLCluster's app user owns the `app` database (CNPG bootstrap.initdb) and
+  # has full privileges on it but no CREATEDB, so we wire both User and Admin
+  # from the same app Secret and pin Admin.ExistingDatabase to the app database.
+  # That makes Zitadel's init connect Admin directly to `app`, so the
+  # VerifyDatabase step's `current_database() == databaseName` short-circuit
+  # fires and CREATE DATABASE is never attempted. VerifyUser and VerifyGrant
+  # also short-circuit (same role). verifyZitadel runs as User (owner) and
+  # creates the schemas. See Zitadel's "managed PostgreSQL service" pattern:
+  # https://zitadel.com/docs/self-hosting/manage/database/postgres
+  {{- $dbConfig = dict
+    "Postgres" (dict
+      "Host" $p.host
+      "Port" $p.port
+      "Database" $p.database
+      "User" (dict "SSL" (dict "Mode" $p.sslMode))
+      "Admin" (dict
+        "SSL" (dict "Mode" $p.sslMode)
+        "ExistingDatabase" $p.database
+      )
+    )
+  }}
+  # No DB env vars in psqlClusterRef mode: a `secretKeyRef` on an env var
+  # resolves in the consuming pod's namespace, but the CNPG-generated
+  # `<cluster>-app` Secret lives in the PSQLCluster's namespace — which is
+  # usually different from Zitadel's install namespace. Credentials are
+  # supplied via the manually-pre-created `chartValues.zitadel.configSecretName`
+  # Secret (a YAML config snippet, see the AuthStack manifest). Follow-up:
+  # compose this Secret in the install namespace via ExternalSecret +
+  # kubernetes-source SecretStore so it can be derived from the CNPG app
+  # secret automatically. Tracked as a sibling to the reconciler work.
+{{- else if eq $db.mode "external" }}
+  {{- if not $db.external.dsnSecretRef.name }}
+    {{- fail "spec.database.external.dsnSecretRef.name is required" }}
+  {{- end }}
+  {{- $dbEnv = list (dict
+    "name" "ZITADEL_DATABASE_POSTGRES_DSN"
+    "valueFrom" (dict "secretKeyRef" (dict
+      "name" $db.external.dsnSecretRef.name
+      "key" $db.external.dsnSecretRef.key
+    ))
+  ) }}
+{{- end }}
+
+# Build chart values
+# When the reconciler is enabled it OWNS the PAT lifecycle: it mints PATs
+# against existing service accounts and writes K8s Secrets directly. The
+# chart's setup-job PAT sidecars would race and overwrite, so we disable
+# them by leaving `Pat.ExpirationDate` unset (`null`) in FirstInstance.
+# When the reconciler is disabled, fall back to the chart-sidecar lifecycle
+# (legacy behavior — PAT expires at `patExpiration` and gets written to a
+# chart-managed Secret).
+{{- $machineDict := dict
+  "Machine" (dict
+    "Username" $fi.iamAdmin.username
+    "Name" "Automatically Initialized IAM Admin"
+  )
+}}
+{{- $loginClientDict := dict
+  "Machine" (dict
+    "Username" $fi.loginClient.username
+  )
+}}
+{{- if not $state.reconciler.enabled }}
+  {{- $_ := set $machineDict "Pat" (dict "ExpirationDate" $fi.iamAdmin.patExpiration) }}
+  {{- $_ := set $loginClientDict "Pat" (dict "ExpirationDate" $fi.loginClient.patExpiration) }}
+{{- end }}
+
+{{- $orgDict := dict
+  "Name" $fi.org
+}}
+# When externalSecrets.adminPassword is wired, materialize the human admin
+# user (`zitadel-admin`) with a deterministic username. The actual password
+# is supplied via env var (ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD) below
+# so it can be sourced from the projected admin-password Secret without
+# embedding the value in the configmap.
+{{- if $state.externalSecrets.adminPassword.secretPath }}
+  {{- $_ := set $orgDict "Human" (dict
+    "UserName" "zitadel-admin"
+    "FirstName" "Zitadel"
+    "LastName" "Admin"
+    "Email" (dict
+      "Address" "zitadel-admin@localhost"
+      "Verified" true
+    )
+    "PasswordChangeRequired" false
+  ) }}
+{{- end }}
+
+{{- $cmCfg := dict
+  "ExternalDomain" $state.domain
+  "ExternalSecure" $state.externalSecure
+  "FirstInstance" (dict
+    "Skip" (not $fi.enabled)
+    "Org" $orgDict
+    "Machine" $machineDict
+    "LoginClient" $loginClientDict
+  )
+}}
+{{- if $dbConfig }}
+  {{- $cmCfg = set $cmCfg "Database" $dbConfig }}
+{{- end }}
+
+# Wire the human-admin password from the projected K8s Secret via env var.
+# This reaches the setup job through the chart's `zitadel.dbEnv` helper.
+{{- if $state.externalSecrets.adminPassword.secretPath }}
+  {{- $dbEnv = append $dbEnv (dict
+    "name" "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD"
+    "valueFrom" (dict "secretKeyRef" (dict
+      "name" $state.externalSecrets.adminPassword.secretName
+      "key" "password"
+    ))
+  ) }}
+{{- end }}
+
+{{- $zitadel := dict
+  "configmapConfig" $cmCfg
+}}
+
+# Masterkey wiring — secretRef sets masterkeySecretName, inline sets masterkey directly.
+{{- if eq $mk.mode "secretRef" }}
+  {{- $zitadel = set $zitadel "masterkeySecretName" $mk.secretName }}
+{{- else if eq $mk.mode "inline" }}
+  {{- $zitadel = set $zitadel "masterkey" $mk.inline }}
+{{- end }}
+
+# Database env vars go at the top-level `env` (not `zitadel.env`). The chart's
+# `zitadel.dbEnv` helper reads `.Values.env` and is included by the init/setup
+# Jobs as well as the main Deployment. Values under `zitadel.env` only reach
+# the main Deployment.
+{{- $chartDefaults := dict
+  "zitadel" $zitadel
+  "env" $dbEnv
+}}
+
+# Gateway API wiring (HTTPRoute + GRPCRoute drive off chart-native fields)
+{{- if $gw.enabled }}
+  {{- $parentRef := dict "name" $gw.parentRef.name }}
+  {{- if $gw.parentRef.namespace }}
+    {{- $parentRef = set $parentRef "namespace" $gw.parentRef.namespace }}
+  {{- end }}
+  {{- if $gw.parentRef.sectionName }}
+    {{- $parentRef = set $parentRef "sectionName" $gw.parentRef.sectionName }}
+  {{- end }}
+  {{- $hostnames := list }}
+  {{- if $state.domain }}{{- $hostnames = list $state.domain }}{{- end }}
+  {{- $chartDefaults = mergeOverwrite $chartDefaults (dict
+    "gateway" (dict
+      "httpRoute" (dict
+        "enabled" true
+        "parentRefs" (list $parentRef)
+        "hostnames" $hostnames
+      )
+      "grpcRoute" (dict
+        "enabled" true
+        "parentRefs" (list $parentRef)
+        "hostnames" $hostnames
+      )
+    )
+  ) }}
+{{- end }}
+
+---
+apiVersion: helm.m.crossplane.io/v1beta1
+kind: Release
+metadata:
+  name: {{ $state.name }}-zitadel
+  annotations:
+    {{ setResourceNameAnnotation "helm-release-zitadel" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    chart:
+      name: zitadel
+      repository: https://charts.zitadel.com
+      version: {{ $state.chartVersion }}
+    namespace: {{ $state.namespace }}
+    {{- if $state.overrideAllValues }}
+    values:
+      {{- toYaml $state.overrideAllValues | nindent 6 }}
+    {{- else }}
+    {{- $merged := mergeOverwrite $chartDefaults $state.chartValues }}
+    values:
+      {{- toYaml $merged | nindent 6 }}
+    {{- end }}
+  rollbackLimit: 3
+  providerConfigRef:
+    name: {{ $state.helmProviderConfigRef.name }}
+    kind: {{ $state.helmProviderConfigRef.kind }}
+
+# Gate the Helm release on the namespace existing.
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ $state.name }}-delete-zitadel-before-namespace
+  annotations:
+    {{ setResourceNameAnnotation "usage-zitadel-namespace" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: {{ $state.name }}-namespace
+  by:
+    apiVersion: helm.m.crossplane.io/v1beta1
+    kind: Release
+    resourceRef:
+      name: {{ $state.name }}-zitadel

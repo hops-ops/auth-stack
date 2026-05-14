@@ -1,0 +1,25 @@
+# code: language=yaml
+#
+# Namespace for the Zitadel install.
+#
+
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-namespace
+  annotations:
+    {{ setResourceNameAnnotation "namespace" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
