@@ -2,6 +2,15 @@
 #
 # Namespace for the Zitadel install.
 #
+# Full ownership (`*` policies): AuthStack owns the install namespace
+# end-to-end. With v2's embedded PSQLCluster mode, the PSQLCluster is
+# composed by AuthStack itself, so there's no shared-tenancy concern —
+# delete cascades naturally.
+#
+# BYO mode (`spec.database.psqlClusterRef`) is for cases where the
+# PSQLCluster is provisioned independently; in that case the PSQLCluster
+# typically lives in its own namespace and the operator manages tenancy
+# at a higher level.
 
 ---
 apiVersion: kubernetes.m.crossplane.io/v1alpha1

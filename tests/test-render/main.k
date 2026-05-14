@@ -118,120 +118,59 @@ _items = [
     }
 
     # ==========================================================================
-    # Test 3c: AdminPassword + iamAdminPat + loginClientPat external secrets
-    # compose ExternalSecret resources. Reconciler CronJob is rendered when
-    # adminPassword.secretPath is set (default-on).
+    # Test 3c: spec.database.embedded composes a PSQLCluster XR with the
+    # AuthStack install ns as its targetNamespace.
     # ==========================================================================
     metav1alpha1.CompositionTest {
-        metadata.name = "reconciler-pattern-composes-eso-pushsecret-cronjob"
+        metadata.name = "embedded-composes-psql-cluster-xr"
         spec = {
             compositionPath = "apis/authstacks/composition.yaml"
             xrdPath = "apis/authstacks/definition.yaml"
             timeoutSeconds = 60
             validate = False
             xr = stacksv1alpha1.AuthStack {
-                metadata.name = "rec-auth"
+                metadata.name = "emb-auth"
+                metadata.namespace = "default"
                 spec = {
                     clusterName = "test-cluster"
                     domain = "auth.example.com"
+                    namespace = "zitadel"
                     firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
-                    database.psqlClusterRef.name = "zitadel-pg"
-                    externalSecrets = {
-                        enabled = True
-                        masterkey.secretPath = "test/zitadel/masterkey"
-                        adminPassword.secretPath = "test/zitadel/admin-password"
-                        iamAdminPat.secretPath = "test/zitadel/iam-admin-pat"
-                        loginClientPat.secretPath = "test/zitadel/login-client"
+                    database.embedded = {
+                        storage.size = "2Gi"
                     }
                 }
             }
             assertResources = [
-                # ExternalSecret for admin password
+                # Embedded PSQLCluster XR — name derived from AuthStack name,
+                # targetNamespace = install ns so CNPG resources land where
+                # Zitadel pods can env-var-mount the app Secret.
                 {
-                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-                    kind = "Object"
-                    metadata.name = "rec-auth-external-secret-admin-password"
-                    spec.forProvider.manifest = {
-                        apiVersion = "external-secrets.io/v1"
-                        kind = "ExternalSecret"
-                        metadata.name = "zitadel-admin-password"
-                        spec = {
-                            target.creationPolicy = "Owner"
-                            data = [{
-                                secretKey = "password"
-                                remoteRef = {key = "test/zitadel/admin-password", property = "password"}
-                            }]
-                        }
+                    apiVersion = "hops.ops.com.ai/v1alpha1"
+                    kind = "PSQLCluster"
+                    metadata = {
+                        name = "emb-auth-pg"
+                        namespace = "default"
+                    }
+                    spec = {
+                        clusterName = "test-cluster"
+                        targetNamespace = "zitadel"
+                        storage.size = "2Gi"
+                        app.role = "zitadel"
+                        app.database = "zitadel"
                     }
                 }
-                # PushSecret for iam-admin PAT
-                {
-                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-                    kind = "Object"
-                    metadata.name = "rec-auth-push-secret-iam-admin-pat"
-                    spec.forProvider.manifest = {
-                        apiVersion = "external-secrets.io/v1alpha1"
-                        kind = "PushSecret"
-                        metadata.name = "iam-admin-pat"
-                        spec = {
-                            updatePolicy = "Replace"
-                            selector.secret.name = "iam-admin-pat"
-                        }
-                    }
-                }
-                # Reconciler CronJob
-                {
-                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-                    kind = "Object"
-                    metadata.name = "rec-auth-reconciler-cronjob"
-                    spec.forProvider.manifest = {
-                        apiVersion = "batch/v1"
-                        kind = "CronJob"
-                        metadata.name = "rec-auth-reconciler"
-                        spec = {
-                            schedule = "*/5 * * * *"
-                            concurrencyPolicy = "Forbid"
-                        }
-                    }
-                }
-            ]
-        }
-    }
-
-    # ==========================================================================
-    # Test 3d: When reconciler is on, FirstInstance.Machine.Pat and
-    # FirstInstance.LoginClient.Pat are NOT set (we own the PAT lifecycle).
-    # ==========================================================================
-    metav1alpha1.CompositionTest {
-        metadata.name = "reconciler-disables-chart-pat-sidecars"
-        spec = {
-            compositionPath = "apis/authstacks/composition.yaml"
-            xrdPath = "apis/authstacks/definition.yaml"
-            timeoutSeconds = 60
-            validate = False
-            xr = stacksv1alpha1.AuthStack {
-                metadata.name = "no-sidecar-auth"
-                spec = {
-                    clusterName = "test-cluster"
-                    domain = "auth.example.com"
-                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
-                    database.psqlClusterRef.name = "zitadel-pg"
-                    externalSecrets = {
-                        enabled = True
-                        adminPassword.secretPath = "test/zitadel/admin-password"
-                    }
-                }
-            }
-            assertResources = [
+                # Helm release wires DB connection from the composed
+                # PSQLCluster's expected CNPG service + app Secret.
                 {
                     apiVersion = "helm.m.crossplane.io/v1beta1"
                     kind = "Release"
-                    metadata.name = "no-sidecar-auth-zitadel"
-                    # Machine and LoginClient blocks present (Username +
-                    # Name) but no Pat sub-block — we mint via reconciler.
-                    spec.forProvider.values.zitadel.configmapConfig.FirstInstance = {
-                        Machine.Machine.Username = "iam-admin"
-                        LoginClient.Machine.Username = "login-client"
+                    metadata.name = "emb-auth-zitadel"
+                    spec.forProvider.values.zitadel.configmapConfig.Database.Postgres = {
+                        Host = "emb-auth-pg-rw.zitadel.svc.cluster.local"
+                        Port = 5432
+                        Database = "zitadel"
+                        Admin.ExistingDatabase = "zitadel"
                     }
                 }
             ]
@@ -472,6 +411,7 @@ _items = [
                                 Username = "platform-admin"
                                 Name = "Automatically Initialized IAM Admin"
                             }
+                            MachineKey.ExpirationDate = "2029-01-01T00:00:00Z"
                             Pat.ExpirationDate = "2029-01-01T00:00:00Z"
                         }
                         LoginClient = {

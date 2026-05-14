@@ -27,39 +27,47 @@
 # Build database env vars and configmapConfig.Database fragment based on mode.
 {{- $dbEnv := list }}
 {{- $dbConfig := dict }}
-{{- if eq $db.mode "psqlClusterRef" }}
-  {{- $p := $db.psqlClusterRef }}
-  # PSQLCluster's app user owns the `app` database (CNPG bootstrap.initdb) and
-  # has full privileges on it but no CREATEDB, so we wire both User and Admin
-  # from the same app Secret and pin Admin.ExistingDatabase to the app database.
-  # That makes Zitadel's init connect Admin directly to `app`, so the
-  # VerifyDatabase step's `current_database() == databaseName` short-circuit
-  # fires and CREATE DATABASE is never attempted. VerifyUser and VerifyGrant
-  # also short-circuit (same role). verifyZitadel runs as User (owner) and
-  # creates the schemas. See Zitadel's "managed PostgreSQL service" pattern:
-  # https://zitadel.com/docs/self-hosting/manage/database/postgres
+{{- /* Both embedded and psqlClusterRef modes wire to a CNPG Cluster whose
+       app user owns the application database and has full privileges on it
+       but no CREATEDB. We pin Admin.ExistingDatabase to the app DB so
+       Zitadel's init VerifyDatabase short-circuits (current_database ==
+       databaseName) and never attempts CREATE DATABASE. Wire both User and
+       Admin to the same app Secret. */}}
+{{- $cnpgRef := dict }}
+{{- if eq $db.mode "embedded" }}
+  {{- $cnpgRef = $db.embedded }}
+{{- else if eq $db.mode "psqlClusterRef" }}
+  {{- $cnpgRef = $db.psqlClusterRef }}
+{{- end }}
+{{- if $cnpgRef.host }}
   {{- $dbConfig = dict
     "Postgres" (dict
-      "Host" $p.host
-      "Port" $p.port
-      "Database" $p.database
-      "User" (dict "SSL" (dict "Mode" $p.sslMode))
+      "Host" $cnpgRef.host
+      "Port" $cnpgRef.port
+      "Database" $cnpgRef.database
+      "User" (dict "SSL" (dict "Mode" $cnpgRef.sslMode))
       "Admin" (dict
-        "SSL" (dict "Mode" $p.sslMode)
-        "ExistingDatabase" $p.database
+        "SSL" (dict "Mode" $cnpgRef.sslMode)
+        "ExistingDatabase" $cnpgRef.database
       )
     )
   }}
-  # No DB env vars in psqlClusterRef mode: a `secretKeyRef` on an env var
-  # resolves in the consuming pod's namespace, but the CNPG-generated
-  # `<cluster>-app` Secret lives in the PSQLCluster's namespace — which is
-  # usually different from Zitadel's install namespace. Credentials are
-  # supplied via the manually-pre-created `chartValues.zitadel.configSecretName`
-  # Secret (a YAML config snippet, see the AuthStack manifest). Follow-up:
-  # compose this Secret in the install namespace via ExternalSecret +
-  # kubernetes-source SecretStore so it can be derived from the CNPG app
-  # secret automatically. Tracked as a sibling to the reconciler work.
-{{- else if eq $db.mode "external" }}
+  # DB credentials flow via top-level env vars sourced from the CNPG-generated
+  # `<cluster>-app` Secret (or one mirrored by ESO). Embedded mode places the
+  # Secret in the install ns by design; psqlClusterRef mode requires the
+  # operator to ensure the PSQLCluster's `targetNamespace` matches.
+  {{- $dbEnv = list
+    (dict "name" "ZITADEL_DATABASE_POSTGRES_USER_USERNAME"
+      "valueFrom" (dict "secretKeyRef" (dict "name" $cnpgRef.appSecretName "key" "username")))
+    (dict "name" "ZITADEL_DATABASE_POSTGRES_USER_PASSWORD"
+      "valueFrom" (dict "secretKeyRef" (dict "name" $cnpgRef.appSecretName "key" "password")))
+    (dict "name" "ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME"
+      "valueFrom" (dict "secretKeyRef" (dict "name" $cnpgRef.appSecretName "key" "username")))
+    (dict "name" "ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD"
+      "valueFrom" (dict "secretKeyRef" (dict "name" $cnpgRef.appSecretName "key" "password")))
+  }}
+{{- end }}
+{{- if eq $db.mode "external" }}
   {{- if not $db.external.dsnSecretRef.name }}
     {{- fail "spec.database.external.dsnSecretRef.name is required" }}
   {{- end }}
@@ -73,20 +81,12 @@
 {{- end }}
 
 # Build chart values
-# When the reconciler is enabled it OWNS the PAT lifecycle: it mints PATs
-# against existing service accounts and writes K8s Secrets directly. The
-# chart's setup-job PAT sidecars would race and overwrite, so we disable
-# them by leaving `Pat.ExpirationDate` unset (`null`) in FirstInstance.
-# When the reconciler is disabled, fall back to the chart-sidecar lifecycle
-# (legacy behavior — PAT expires at `patExpiration` and gets written to a
-# chart-managed Secret).
-#
-# MachineKey IS configured even when the reconciler is enabled: the iam-admin
-# JWT machine key is what the reconciler uses to authenticate. It's the
-# durable credential captured to AWS SM by PushSecret (see
-# `externalSecrets.iamAdminMachineKey`). The chart's MachineKey sidecar only
-# fires on the very first install (FirstInstance.Skip stays false there);
-# on re-installs the K8s Secret comes back via ExternalSecret projection.
+# The chart's FirstInstance setup-job owns the entire operational-Secret
+# lifecycle: it mints the iam-admin machine key, iam-admin PAT, and
+# login-client PAT on first install and writes them to K8s Secrets the
+# chart's other components consume. With embedded mode, AuthStack delete
+# + re-apply re-bootstraps from scratch (fresh DB → FirstInstance runs
+# again), so we don't need a re-mint path.
 {{- $machineDict := dict
   "Machine" (dict
     "Username" $fi.iamAdmin.username
@@ -96,16 +96,18 @@
     "ExpirationDate" $fi.iamAdmin.patExpiration
     "Type" 1
   )
+  "Pat" (dict
+    "ExpirationDate" $fi.iamAdmin.patExpiration
+  )
 }}
 {{- $loginClientDict := dict
   "Machine" (dict
     "Username" $fi.loginClient.username
   )
+  "Pat" (dict
+    "ExpirationDate" $fi.loginClient.patExpiration
+  )
 }}
-{{- if not $state.reconciler.enabled }}
-  {{- $_ := set $machineDict "Pat" (dict "ExpirationDate" $fi.iamAdmin.patExpiration) }}
-  {{- $_ := set $loginClientDict "Pat" (dict "ExpirationDate" $fi.loginClient.patExpiration) }}
-{{- end }}
 
 {{- $orgDict := dict
   "Name" $fi.org

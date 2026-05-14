@@ -1,0 +1,66 @@
+# code: language=yaml
+#
+# Embedded PSQLCluster
+#
+# When `spec.database.embedded` is set, AuthStack composes its own
+# PSQLCluster XR. The composed XR lives in the AuthStack XR's own
+# namespace (the control plane), and its `targetNamespace` points at
+# the AuthStack install namespace so CNPG resources + the app Secret
+# land where Zitadel pods can read them via env-var `secretKeyRef`.
+#
+# Lifecycle is atomic: deleting the AuthStack cascades to the embedded
+# PSQLCluster, which in turn tears down the CNPG Cluster. No shared-
+# namespace tenancy concerns.
+
+{{- $db := $state.database }}
+{{- $emb := $db.embedded }}
+
+{{- if eq $db.mode "embedded" }}
+---
+apiVersion: hops.ops.com.ai/v1alpha1
+kind: PSQLCluster
+metadata:
+  name: {{ $emb.psqlClusterName }}
+  namespace: {{ $emb.xrNamespace }}
+  annotations:
+    {{ setResourceNameAnnotation "embedded-psql-cluster" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  clusterName: {{ $state.clusterName }}
+  targetNamespace: {{ $state.namespace }}
+  labels: {{ $state.labels | toJson }}
+  kubernetesProviderConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+  instances: {{ $emb.instances }}
+  storage:
+    size: {{ $emb.storage.size | quote }}
+    class: {{ $emb.storage.class | quote }}
+  {{- if $emb.postgresql }}
+  postgresql:
+    {{- toYaml $emb.postgresql | nindent 4 }}
+  {{- end }}
+  app:
+    role: {{ $emb.app.role | quote }}
+    database: {{ $emb.app.database | quote }}
+    {{- if $emb.app.externalSecret }}
+    externalSecret:
+      {{- toYaml $emb.app.externalSecret | nindent 6 }}
+    {{- end }}
+  {{- if $emb.superuser }}
+  superuser:
+    {{- toYaml $emb.superuser | nindent 4 }}
+  {{- end }}
+  {{- if $emb.ha.enabled }}
+  ha:
+    {{- toYaml $emb.ha | nindent 4 }}
+  {{- end }}
+  {{- if $emb.monitoring }}
+  monitoring:
+    {{- toYaml $emb.monitoring | nindent 4 }}
+  {{- end }}
+  {{- if $emb.cnpg }}
+  cnpg:
+    {{- toYaml $emb.cnpg | nindent 4 }}
+  {{- end }}
+{{- end }}

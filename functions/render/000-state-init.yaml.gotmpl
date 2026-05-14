@@ -70,17 +70,39 @@
 {{- end }}
 
 # ==============================================================================
-# Database — one-of psqlClusterRef / external.
+# Database — one-of embedded / psqlClusterRef / external.
 # ==============================================================================
 {{- $db := $spec.database | default dict }}
+{{- $dbEmbedded := $db.embedded | default dict }}
 {{- $dbPsql := $db.psqlClusterRef | default dict }}
 {{- $dbExternal := $db.external | default dict }}
 
 {{- $dbModes := list }}
+{{- if $dbEmbedded }}{{- $dbModes = append $dbModes "embedded" }}{{- end }}
 {{- if $dbPsql }}{{- $dbModes = append $dbModes "psqlClusterRef" }}{{- end }}
 {{- if $dbExternal }}{{- $dbModes = append $dbModes "external" }}{{- end }}
 {{- $dbMode := "" }}
 {{- if eq (len $dbModes) 1 }}{{- $dbMode = index $dbModes 0 }}{{- end }}
+
+# Embedded PSQLCluster defaults
+# When embedded, AuthStack composes a PSQLCluster XR named "<authstack-name>-pg"
+# in the AuthStack XR's own namespace (the control-plane ns). The composed
+# PSQLCluster's targetNamespace is wired to $namespace (the Zitadel install ns)
+# so CNPG resources + the app Secret land where Zitadel pods can read them via
+# env-var secretKeyRef.
+{{- $embAppDefault := dict "role" "zitadel" "database" "zitadel" }}
+{{- $embApp := merge ($dbEmbedded.app | default dict) $embAppDefault }}
+{{- $embStorage := $dbEmbedded.storage | default dict }}
+{{- if not $embStorage.size }}{{- $embStorage = set $embStorage "size" "2Gi" }}{{- end }}
+{{- if not $embStorage.class }}{{- $embStorage = set $embStorage "class" "psql" }}{{- end }}
+{{- $embPostgres := $dbEmbedded.postgresql | default dict }}
+{{- if not $embPostgres.version }}{{- $embPostgres = set $embPostgres "version" "17" }}{{- end }}
+{{- $embInstances := 1 }}
+{{- if hasKey $dbEmbedded "instances" }}{{- $embInstances = $dbEmbedded.instances }}{{- end }}
+{{- $embSslMode := $dbEmbedded.sslMode | default "disable" }}
+{{- $embPsqlName := printf "%s-pg" $name }}
+{{- $embPsqlXrNamespace := $metadata.namespace | default "default" }}
+{{- $embPsqlHost := printf "%s-rw.%s.svc.cluster.local" $embPsqlName $namespace }}
 
 # psqlClusterRef defaults
 # psqlClusterRef.namespace defaults to the AuthStack XR's own namespace (where
@@ -100,6 +122,11 @@
 
 # ==============================================================================
 # ExternalSecrets integration
+#
+# Only durable inputs flow through ESO: masterkey + admin-password. Both
+# are seeded by `hops auth bootstrap <cluster>`. Operational state
+# (machine keys, PATs) is owned by the chart's FirstInstance setup job
+# and re-bootstrapped on each fresh install.
 # ==============================================================================
 {{- $eso := $spec.externalSecrets | default dict }}
 {{- $esoEnabled := $eso.enabled | default false }}
@@ -108,37 +135,7 @@
 {{- $esoMasterkeyPath := $esoMasterkey.secretPath | default "" }}
 {{- $esoAdminPwd := $eso.adminPassword | default dict }}
 {{- $esoAdminPwdPath := $esoAdminPwd.secretPath | default "" }}
-{{- $esoIamAdminKey := $eso.iamAdminMachineKey | default dict }}
-{{- $esoIamAdminKeyPath := $esoIamAdminKey.secretPath | default "" }}
-{{- $esoIamAdminPat := $eso.iamAdminPat | default dict }}
-{{- $esoIamAdminPatPath := $esoIamAdminPat.secretPath | default "" }}
-{{- $esoLoginClientPat := $eso.loginClientPat | default dict }}
-{{- $esoLoginClientPatPath := $esoLoginClientPat.secretPath | default "" }}
-
-# K8s Secret names the chart expects + that the reconciler manages.
-# `iam-admin` (machine key), `iam-admin-pat` (PAT), `login-client` (PAT) all
-# mirror what the chart's setup-job sidecars write so we can drop in without
-# forking the chart.
 {{- $adminPwdSecretName := "zitadel-admin-password" }}
-{{- $iamAdminKeySecretName := "iam-admin" }}
-{{- $iamAdminPatSecretName := "iam-admin-pat" }}
-{{- $loginClientPatSecretName := "login-client" }}
-
-# ==============================================================================
-# Reconciler CronJob defaults
-# ==============================================================================
-{{- $rec := $spec.reconciler | default dict }}
-{{- $recEnabled := false }}
-{{- if hasKey $rec "enabled" }}
-  {{- $recEnabled = $rec.enabled }}
-{{- else if $esoAdminPwdPath }}
-  # Default-on when adminPassword is configured (without it the reconciler
-  # can't authenticate; we won't render a Job that's guaranteed to fail).
-  {{- $recEnabled = true }}
-{{- end }}
-{{- /* Bump this in lockstep with releases of hops-ops/authstack-reconciler. */}}
-{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:v0.0.3" }}
-{{- $recSchedule := $rec.schedule | default "*/5 * * * *" }}
 
 # ==============================================================================
 # Gateway routing
@@ -198,6 +195,23 @@
   )
   "database" (dict
     "mode" $dbMode
+    "embedded" (dict
+      "psqlClusterName" $embPsqlName
+      "xrNamespace" $embPsqlXrNamespace
+      "host" $embPsqlHost
+      "port" 5432
+      "database" $embApp.database
+      "sslMode" $embSslMode
+      "appSecretName" (printf "%s-app" $embPsqlName)
+      "instances" $embInstances
+      "storage" $embStorage
+      "postgresql" $embPostgres
+      "app" $embApp
+      "superuser" ($dbEmbedded.superuser | default dict)
+      "ha" ($dbEmbedded.ha | default dict)
+      "monitoring" ($dbEmbedded.monitoring | default dict)
+      "cnpg" ($dbEmbedded.cnpg | default dict)
+    )
     "psqlClusterRef" (dict
       "name" $psqlName
       "namespace" $psqlNamespace
@@ -224,23 +238,6 @@
       "secretPath" $esoAdminPwdPath
       "secretName" $adminPwdSecretName
     )
-    "iamAdminMachineKey" (dict
-      "secretPath" $esoIamAdminKeyPath
-      "secretName" $iamAdminKeySecretName
-    )
-    "iamAdminPat" (dict
-      "secretPath" $esoIamAdminPatPath
-      "secretName" $iamAdminPatSecretName
-    )
-    "loginClientPat" (dict
-      "secretPath" $esoLoginClientPatPath
-      "secretName" $loginClientPatSecretName
-    )
-  )
-  "reconciler" (dict
-    "enabled" $recEnabled
-    "image" $recImage
-    "schedule" $recSchedule
   )
   "gateway" (dict
     "enabled" $gwEnabled

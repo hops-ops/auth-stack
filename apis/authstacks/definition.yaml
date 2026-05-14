@@ -141,11 +141,146 @@ spec:
                 - masterkey
               database:
                 description: |
-                  Database backend for Zitadel. Set exactly one of `psqlClusterRef`
-                  (compose with a PSQLCluster on this cluster) or `external`
-                  (BYO DSN — managed Postgres, RDS, etc.).
+                  Database backend for Zitadel. Set exactly one of:
+                    * `embedded` — AuthStack composes its own PSQLCluster, owns
+                      the lifecycle (delete-cascades). Defaults are tuned for a
+                      single-tenant Zitadel install. Cleanest UX for local-dev
+                      and single-AuthStack-per-cluster.
+                    * `psqlClusterRef` — BYO existing PSQLCluster. Escape hatch
+                      for shared-cluster topologies, pre-provisioned DBs, or
+                      multi-tenant fan-out.
+                    * `external` — BYO Postgres DSN. Managed Postgres, RDS, etc.
                 type: object
                 properties:
+                  embedded:
+                    description: |
+                      Compose a `PSQLCluster` XR owned by this AuthStack. The
+                      composed PSQLCluster's data plane (CNPG Cluster + Secrets)
+                      lands in the AuthStack's install namespace so Zitadel pods
+                      can mount the app Secret via env-var `secretKeyRef`
+                      natively — no cross-namespace mirror needed. Defaults
+                      target a 2Gi single-instance Postgres suitable for a
+                      single Zitadel install.
+                    type: object
+                    properties:
+                      instances:
+                        description: Number of Postgres instances. Defaults to 1.
+                        type: integer
+                        default: 1
+                      storage:
+                        description: Postgres data PVC sizing. Online expansion is supported when the StorageClass allows it.
+                        type: object
+                        properties:
+                          size:
+                            description: PVC size. Defaults to "2Gi".
+                            type: string
+                            default: "2Gi"
+                          class:
+                            description: StorageClass name. Defaults to "psql" (the platform's psql-stack StorageClass).
+                            type: string
+                            default: psql
+                      postgresql:
+                        description: Postgres version + tuning parameters.
+                        type: object
+                        properties:
+                          version:
+                            description: Postgres major version. Defaults to "17".
+                            type: string
+                            default: "17"
+                          parameters:
+                            description: postgres.conf parameters merged into the composed Cluster.spec.postgresql.parameters.
+                            type: object
+                            additionalProperties:
+                              type: string
+                            x-kubernetes-preserve-unknown-fields: true
+                      app:
+                        description: |
+                          Application user — the Postgres role Zitadel connects
+                          as. Defaults to role `zitadel`, database `zitadel`,
+                          CNPG-generated basic-auth Secret. Set `externalSecret`
+                          to source credentials from a SecretStore (production).
+                        type: object
+                        properties:
+                          role:
+                            description: Postgres role name. Defaults to "zitadel".
+                            type: string
+                            default: zitadel
+                          database:
+                            description: Application database name. Defaults to "zitadel".
+                            type: string
+                            default: zitadel
+                          externalSecret:
+                            description: Source credentials via External Secrets Operator. Remote value must be a JSON blob with `username` and `password` properties.
+                            type: object
+                            properties:
+                              secretStore:
+                                type: object
+                                properties:
+                                  kind:
+                                    type: string
+                                    enum:
+                                    - ClusterSecretStore
+                                    - SecretStore
+                                    default: ClusterSecretStore
+                                  name:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                required:
+                                - name
+                              secretRef:
+                                type: object
+                                properties:
+                                  path:
+                                    type: string
+                                required:
+                                - path
+                            required:
+                            - secretStore
+                            - secretRef
+                      ha:
+                        description: HA mode — bumps instances and adds zonal topology spread.
+                        type: object
+                        properties:
+                          enabled:
+                            type: boolean
+                            default: false
+                          replicas:
+                            type: integer
+                            default: 3
+                          topologySpreadByZone:
+                            type: boolean
+                            default: true
+                      monitoring:
+                        description: Enable Prometheus PodMonitor. Defaults on.
+                        type: object
+                        properties:
+                          enabled:
+                            type: boolean
+                            default: true
+                      sslMode:
+                        description: SSL mode Zitadel uses to connect to Postgres. Defaults to "disable" (in-cluster, same namespace).
+                        type: string
+                        enum:
+                        - disable
+                        - allow
+                        - prefer
+                        - require
+                        - verify-ca
+                        - verify-full
+                        default: disable
+                      cnpg:
+                        description: Direct passthrough into the composed PSQLCluster's `cnpg` escape hatch for novel CNPG features.
+                        type: object
+                        properties:
+                          values:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          overrideAllValues:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                    required:
+                    - storage
                   psqlClusterRef:
                     description: |
                       Reference to a `PSQLCluster` XR. AuthStack wires Zitadel's individual
@@ -195,96 +330,45 @@ spec:
                     - dsnSecretRef
               externalSecrets:
                 description: |
-                  ExternalSecrets Operator integration. When enabled, AuthStack composes
-                  `ExternalSecret` resources that pull values from the platform secret store
-                  (typically AWS Secrets Manager via `hops-aws-secrets-manager`) into the
-                  K8s Secrets the chart consumes. Pairs with the `hops secrets` pipeline:
-                  engineer authors plaintext, SOPS-encrypts, runs `hops secrets sync aws`,
-                  and ESO does the rest.
+                  ExternalSecrets Operator integration. AuthStack only projects
+                  durable inputs from the secret store — values that must survive
+                  AuthStack delete/recreate. Operational state (machine keys,
+                  PATs) is owned by the Zitadel chart's `FirstInstance` setup
+                  job and re-bootstrapped on each fresh install (which, with
+                  embedded mode, means each AuthStack delete + reapply).
                 type: object
                 properties:
                   enabled:
-                    description: Enable ExternalSecret composition. Defaults to false (user manages Secrets directly).
+                    description: Enable ExternalSecret composition. Defaults to false.
                     type: boolean
                   secretStoreName:
-                    description: Name of the ClusterSecretStore created by the platform's secret-stack. Defaults to "hops-aws-secrets-manager".
+                    description: Name of the ClusterSecretStore. Defaults to "hops-aws-secrets-manager".
                     type: string
                   masterkey:
-                    description: ExternalSecret for the Zitadel masterkey. The remote AWS SM secret should contain a single string property keyed `masterkey`.
+                    description: |
+                      ExternalSecret for the Zitadel masterkey — the 32-char
+                      symmetric key Zitadel uses for at-rest crypto. Durable:
+                      lose this and an existing DB is unreadable. Remote AWS SM
+                      secret should contain a string property keyed `masterkey`.
+                      Seed via `hops auth bootstrap <cluster>`.
                     type: object
                     properties:
                       secretPath:
-                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/masterkey`).
+                        description: Path in AWS Secrets Manager (e.g. `<cluster>/zitadel/masterkey`).
                         type: string
                   adminPassword:
                     description: |
-                      ExternalSecret for the human admin (`zitadel-admin`) password. The
-                      reconciler authenticates as this user via OAuth password grant to mint
-                      PATs against existing service accounts. Remote AWS SM secret should
-                      contain a single string property keyed `password`.
+                      ExternalSecret for the human `zitadel-admin` password used
+                      to log into the Console. Wired through the chart's
+                      `FirstInstance.Org.Human.Password` so the user is created
+                      with a deterministic, AWS-SM-seeded password. Remote AWS SM
+                      secret should contain a string property keyed `password`.
+                      Seed via `hops auth bootstrap <cluster>`.
                     type: object
                     properties:
                       secretPath:
-                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/admin-password`).
+                        description: Path in AWS Secrets Manager (e.g. `<cluster>/zitadel/admin-password`).
                         type: string
-                  iamAdminMachineKey:
-                    description: |
-                      ExternalSecret + PushSecret pair for the iam-admin service-account JWT
-                      machine key. This is the reconciler's primary credential (it signs a JWT
-                      with the private key and exchanges for an access token). On first install
-                      Zitadel's setup-job writes the K8s Secret `iam-admin` containing the JSON
-                      machine-key blob; PushSecret captures it to AWS SM at this path so re-
-                      installs can project it back. Remote AWS SM secret should contain a single
-                      string property keyed `key.json` carrying the raw machine-key JSON.
-                    type: object
-                    properties:
-                      secretPath:
-                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/iam-admin-key`).
-                        type: string
-                  iamAdminPat:
-                    description: |
-                      ExternalSecret + PushSecret pair for the iam-admin service-account PAT.
-                      AWS SM is captured-not-source: on first install the reconciler mints a
-                      PAT and PushSecret writes it up; on re-installs ExternalSecret projects
-                      it back. The reconciler validates and re-mints if invalid (e.g. after
-                      DB restore the captured value is stale). Remote AWS SM secret should
-                      contain a single string property keyed `pat`.
-                    type: object
-                    properties:
-                      secretPath:
-                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/iam-admin-pat`).
-                        type: string
-                  loginClientPat:
-                    description: |
-                      ExternalSecret + PushSecret pair for the login-client service-account PAT.
-                      Same capture-and-restore lifecycle as `iamAdminPat`. Required by the
-                      login UI pod's volume mount. Remote AWS SM secret should contain a
-                      single string property keyed `pat`.
-                    type: object
-                    properties:
-                      secretPath:
-                        description: Path of the secret in AWS Secrets Manager (e.g. `zitadel/login-client`).
-                        type: string
-              reconciler:
-                description: |
-                  In-cluster CronJob that mints and validates the operational PATs
-                  (iam-admin, login-client) against an existing Zitadel install. Idempotent:
-                  no-ops when in-cluster PATs are valid; mints fresh ones when missing or
-                  invalid (e.g. after AuthStack delete/recreate or DB restore). Pairs with
-                  `externalSecrets.{iamAdminPat,loginClientPat}` for capture-to-AWS-SM.
-                  Requires `externalSecrets.adminPassword.secretPath` to be set so the
-                  reconciler can authenticate.
-                type: object
-                properties:
-                  enabled:
-                    description: Enable the reconciler CronJob. Defaults to true when adminPassword is configured.
-                    type: boolean
-                  image:
-                    description: Container image for the reconciler. Defaults to the latest published `ghcr.io/hops-ops/authstack-reconciler`.
-                    type: string
-                  schedule:
-                    description: Cron schedule for the reconciler. Defaults to `*/5 * * * *`.
-                    type: string
               gateway:
                 description: Gateway API routing for the Zitadel install. When enabled, drives the chart's gateway.httpRoute and gateway.grpcRoute. When disabled, the chart's ClusterIP service is left for the consumer to wire.
                 type: object
