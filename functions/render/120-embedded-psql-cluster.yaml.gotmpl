@@ -63,4 +63,31 @@ spec:
   cnpg:
     {{- toYaml $emb.cnpg | nindent 4 }}
   {{- end }}
+
+# Gate Zitadel Helm release deletion ahead of the embedded PSQLCluster.
+# The chart's `helm uninstall` pre-delete hooks (init/setup/cleanup jobs)
+# need DB access; if the CNPG Cluster + app Secret are torn down first,
+# those jobs hang in CreateContainerConfigError and helm uninstall stalls
+# indefinitely. This Usage forces the Helm release to drain before
+# Crossplane begins deleting the PSQLCluster XR.
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ $state.name }}-delete-zitadel-before-embedded-psql-cluster
+  annotations:
+    {{ setResourceNameAnnotation "usage-zitadel-embedded-psql-cluster" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: hops.ops.com.ai/v1alpha1
+    kind: PSQLCluster
+    resourceRef:
+      name: {{ $emb.psqlClusterName }}
+  by:
+    apiVersion: helm.m.crossplane.io/v1beta1
+    kind: Release
+    resourceRef:
+      name: {{ $state.name }}-zitadel
 {{- end }}
