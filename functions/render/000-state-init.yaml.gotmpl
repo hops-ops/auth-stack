@@ -123,18 +123,16 @@
 # ==============================================================================
 # ExternalSecrets integration
 #
-# Only durable inputs flow through ESO: masterkey + admin-password. Both
-# are seeded by `hops auth bootstrap <cluster>`. Operational state
-# (machine keys, PATs) is owned by the chart's FirstInstance setup job
-# and re-bootstrapped on each fresh install.
+# One AWS SM secret @ $esoPath carries both durable values as JSON
+# properties: `masterkey` and `admin-password`. Both are seeded by
+# `hops auth bootstrap <cluster>`. Operational state (machine keys,
+# PATs) is owned by the chart's FirstInstance setup job and re-
+# bootstrapped on each fresh install.
 # ==============================================================================
 {{- $eso := $spec.externalSecrets | default dict }}
 {{- $esoEnabled := $eso.enabled | default false }}
 {{- $esoStoreName := $eso.secretStoreName | default "hops-aws-secrets-manager" }}
-{{- $esoMasterkey := $eso.masterkey | default dict }}
-{{- $esoMasterkeyPath := $esoMasterkey.secretPath | default "" }}
-{{- $esoAdminPwd := $eso.adminPassword | default dict }}
-{{- $esoAdminPwdPath := $esoAdminPwd.secretPath | default "" }}
+{{- $esoPath := $eso.secretPath | default "" }}
 {{- $adminPwdSecretName := "zitadel-admin-password" }}
 
 # ==============================================================================
@@ -233,11 +231,8 @@
   "externalSecrets" (dict
     "enabled" $esoEnabled
     "secretStoreName" $esoStoreName
-    "masterkey" (dict "secretPath" $esoMasterkeyPath)
-    "adminPassword" (dict
-      "secretPath" $esoAdminPwdPath
-      "secretName" $adminPwdSecretName
-    )
+    "secretPath" $esoPath
+    "adminPasswordSecretName" $adminPwdSecretName
   )
   "gateway" (dict
     "enabled" $gwEnabled

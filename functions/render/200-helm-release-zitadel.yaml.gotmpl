@@ -112,12 +112,12 @@
 {{- $orgDict := dict
   "Name" $fi.org
 }}
-# When externalSecrets.adminPassword is wired, materialize the human admin
-# user (`zitadel-admin`) with a deterministic username. The actual password
+# When externalSecrets is wired, materialize the human admin user
+# (`zitadel-admin`) with a deterministic username. The actual password
 # is supplied via env var (ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD) below
 # so it can be sourced from the projected admin-password Secret without
 # embedding the value in the configmap.
-{{- if $state.externalSecrets.adminPassword.secretPath }}
+{{- if $state.externalSecrets.secretPath }}
   {{- $_ := set $orgDict "Human" (dict
     "UserName" "zitadel-admin"
     "FirstName" "Zitadel"
@@ -146,11 +146,11 @@
 
 # Wire the human-admin password from the projected K8s Secret via env var.
 # This reaches the setup job through the chart's `zitadel.dbEnv` helper.
-{{- if $state.externalSecrets.adminPassword.secretPath }}
+{{- if $state.externalSecrets.secretPath }}
   {{- $dbEnv = append $dbEnv (dict
     "name" "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD"
     "valueFrom" (dict "secretKeyRef" (dict
-      "name" $state.externalSecrets.adminPassword.secretName
+      "name" $state.externalSecrets.adminPasswordSecretName
       "key" "password"
     ))
   ) }}

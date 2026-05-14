@@ -330,12 +330,19 @@ spec:
                     - dsnSecretRef
               externalSecrets:
                 description: |
-                  ExternalSecrets Operator integration. AuthStack only projects
-                  durable inputs from the secret store — values that must survive
-                  AuthStack delete/recreate. Operational state (machine keys,
-                  PATs) is owned by the Zitadel chart's `FirstInstance` setup
-                  job and re-bootstrapped on each fresh install (which, with
-                  embedded mode, means each AuthStack delete + reapply).
+                  ExternalSecrets Operator integration. AuthStack projects two
+                  durable values — `masterkey` and `admin-password` — from a
+                  single AWS SM secret keyed by `secretPath`. Both values are
+                  seeded together by `hops auth bootstrap <cluster>` and live
+                  as JSON properties under one AWS SM entry:
+
+                      AWS SM @ <secretPath>:
+                        { "masterkey": "...", "admin-password": "..." }
+
+                  Operational state (machine keys, PATs) is NOT projected here
+                  — the Zitadel chart's `FirstInstance` setup job owns those,
+                  re-bootstrapped on each fresh install (which, with embedded
+                  mode, means each AuthStack delete + reapply).
                 type: object
                 properties:
                   enabled:
@@ -344,31 +351,12 @@ spec:
                   secretStoreName:
                     description: Name of the ClusterSecretStore. Defaults to "hops-aws-secrets-manager".
                     type: string
-                  masterkey:
+                  secretPath:
                     description: |
-                      ExternalSecret for the Zitadel masterkey — the 32-char
-                      symmetric key Zitadel uses for at-rest crypto. Durable:
-                      lose this and an existing DB is unreadable. Remote AWS SM
-                      secret should contain a string property keyed `masterkey`.
-                      Seed via `hops auth bootstrap <cluster>`.
-                    type: object
-                    properties:
-                      secretPath:
-                        description: Path in AWS Secrets Manager (e.g. `<cluster>/zitadel/masterkey`).
-                        type: string
-                  adminPassword:
-                    description: |
-                      ExternalSecret for the human `zitadel-admin` password used
-                      to log into the Console. Wired through the chart's
-                      `FirstInstance.Org.Human.Password` so the user is created
-                      with a deterministic, AWS-SM-seeded password. Remote AWS SM
-                      secret should contain a string property keyed `password`.
-                      Seed via `hops auth bootstrap <cluster>`.
-                    type: object
-                    properties:
-                      secretPath:
-                        description: Path in AWS Secrets Manager (e.g. `<cluster>/zitadel/admin-password`).
-                        type: string
+                      Path in AWS Secrets Manager (e.g. `<cluster>/zitadel`).
+                      The remote secret must be a JSON blob with two string
+                      properties: `masterkey` and `admin-password`.
+                    type: string
               gateway:
                 description: Gateway API routing for the Zitadel install. When enabled, drives the chart's gateway.httpRoute and gateway.grpcRoute. When disabled, the chart's ClusterIP service is left for the consumer to wire.
                 type: object

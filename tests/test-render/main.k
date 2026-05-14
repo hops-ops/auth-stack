@@ -178,10 +178,11 @@ _items = [
     }
 
     # ==========================================================================
-    # Test 3b: externalSecrets composes ExternalSecret for masterkey
+    # Test 3b: externalSecrets composes masterkey + admin-password ExternalSecrets
+    # against ONE shared AWS SM secret with different `property:` selectors.
     # ==========================================================================
     metav1alpha1.CompositionTest {
-        metadata.name = "external-secrets-masterkey-composes-eso"
+        metadata.name = "external-secrets-composes-from-shared-aws-sm-path"
         spec = {
             compositionPath = "apis/authstacks/composition.yaml"
             xrdPath = "apis/authstacks/definition.yaml"
@@ -194,7 +195,7 @@ _items = [
                     domain = "auth.example.com"
                     externalSecrets = {
                         enabled = True
-                        masterkey.secretPath = "zitadel/masterkey"
+                        secretPath = "test/zitadel"
                     }
                     firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
                     database.psqlClusterRef.name = "zitadel-pg"
@@ -209,17 +210,24 @@ _items = [
                         apiVersion = "external-secrets.io/v1"
                         kind = "ExternalSecret"
                         metadata.name = "zitadel-masterkey"
-                        spec = {
-                            secretStoreRef = {
-                                name = "hops-aws-secrets-manager"
-                                kind = "ClusterSecretStore"
-                            }
-                            target.name = "zitadel-masterkey"
-                            data = [{
-                                secretKey = "masterkey"
-                                remoteRef = {key = "zitadel/masterkey", property = "masterkey"}
-                            }]
-                        }
+                        spec.data = [{
+                            secretKey = "masterkey"
+                            remoteRef = {key = "test/zitadel", property = "masterkey"}
+                        }]
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "eso-auth-external-secret-admin-password"
+                    spec.forProvider.manifest = {
+                        apiVersion = "external-secrets.io/v1"
+                        kind = "ExternalSecret"
+                        metadata.name = "zitadel-admin-password"
+                        spec.data = [{
+                            secretKey = "password"
+                            remoteRef = {key = "test/zitadel", property = "admin-password"}
+                        }]
                     }
                 }
             ]
