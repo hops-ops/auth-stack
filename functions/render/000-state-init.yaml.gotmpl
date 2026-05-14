@@ -133,7 +133,7 @@
   {{- $recEnabled = true }}
 {{- end }}
 {{- /* Bump this in lockstep with releases of hops-ops/authstack-reconciler. */}}
-{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:v0.0.1" }}
+{{- $recImage := $rec.image | default "ghcr.io/hops-ops/authstack-reconciler:v0.0.3" }}
 {{- $recSchedule := $rec.schedule | default "*/5 * * * *" }}
 
 # ==============================================================================
