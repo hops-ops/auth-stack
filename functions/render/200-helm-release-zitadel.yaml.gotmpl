@@ -200,6 +200,15 @@
         "hostnames" $hostnames
       )
     )
+    "login" (dict
+      "gateway" (dict
+        "httpRoute" (dict
+          "enabled" true
+          "parentRefs" (list $parentRef)
+          "hostnames" $hostnames
+        )
+      )
+    )
   ) }}
 {{- end }}
 
