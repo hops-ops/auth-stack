@@ -2,3 +2,4 @@ _output/
 .up/
 node_modules/
 .DS_Store
+apis/**/configuration.yaml

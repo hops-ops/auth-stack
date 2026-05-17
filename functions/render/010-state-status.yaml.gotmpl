@@ -31,6 +31,23 @@
 ) }}
 
 # ==============================================================================
+# providerConfig status surface — consumer contract.
+#
+# When pushCredentials is enabled, expose where the iam-admin PAT lives
+# in AWS SM so consumers can construct their own ExternalSecret + PC
+# without coupling to AuthStack internals. The domain comes from
+# `status.oidc.issuerURL` (already published).
+# ==============================================================================
+{{- $pcStatus := dict }}
+{{- if $state.externalSecrets.pushCredentials.enabled }}
+  {{- $pcStatus = dict
+    "awsSecretsManagerPath" $state.externalSecrets.pushCredentials.path
+    "accessTokenProperty" $state.externalSecrets.pushCredentials.accessTokenProperty
+  }}
+{{- end }}
+{{- $state = set $state "providerConfigStatus" $pcStatus }}
+
+# ==============================================================================
 # OIDC endpoints
 # ==============================================================================
 {{- $scheme := "http" }}

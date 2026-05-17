@@ -13,6 +13,11 @@ status:
   oidc:
     issuerURL: {{ $s.oidc.issuerURL | quote }}
     discoveryURL: {{ $s.oidc.discoveryURL | quote }}
+  {{- if $state.providerConfigStatus }}
+  providerConfig:
+    awsSecretsManagerPath: {{ $state.providerConfigStatus.awsSecretsManagerPath }}
+    accessTokenProperty: {{ $state.providerConfigStatus.accessTokenProperty }}
+  {{- end }}
   {{- if $s.bootstrap }}
   bootstrap:
     iamAdminPatSecretRef:

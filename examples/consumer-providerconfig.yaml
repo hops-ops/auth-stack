@@ -1,0 +1,62 @@
+# Consumer reference: Zitadel ProviderConfig + ExternalSecret that pull
+# the iam-admin PAT from the AWS SM path AuthStack published it to.
+#
+# Authored by the consumer (any cluster, any namespace, any GitOps repo)
+# once AuthStack reports
+#   status.providerConfig.awsSecretsManagerPath  (e.g. "pat-local/pushed/zitadel-credentials")
+#   status.providerConfig.accessTokenProperty   (defaults to "access_token")
+#   status.oidc.issuerURL                       (the Zitadel domain — bake into the credentials JSON below)
+#
+# Replace the four values marked `# << consumer:` with your AuthStack's
+# published path + domain.
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: zitadel-credentials
+  namespace: my-app                                                       # << consumer: your namespace
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: hops-aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: zitadel-credentials
+    template:
+      engineVersion: v2
+      data:
+        # Final shape consumed by the Zitadel provider's ProviderConfig.
+        # `access_token` is dynamic (pulled from AWS SM); the other three
+        # are static config you author here. Keep `domain` aligned with
+        # the AuthStack's `status.oidc.issuerURL` host.
+        #
+        # NOTE: the chart-managed iam-admin-pat Secret writes the PAT with
+        # a trailing newline; `trim` here strips it so Zitadel doesn't
+        # reject the bearer token at auth.
+        credentials: |
+          {
+            "access_token": "{{ .access_token | trim }}",
+            "domain": "auth.ops.com.ai",                                  # << consumer: AuthStack domain
+            "port": "443",
+            "insecure": false
+          }
+  data:
+  - secretKey: access_token
+    remoteRef:
+      key: push/pat-local/zitadel-credentials                             # << consumer: status.providerConfig.awsSecretsManagerPath
+      property: access_token                                              # << consumer: status.providerConfig.accessTokenProperty
+
+---
+apiVersion: zitadel.m.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: zitadel
+  namespace: my-app                                                       # << consumer: your namespace (same as ExternalSecret)
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      name: zitadel-credentials
+      namespace: my-app                                                   # << consumer: same as above
+      key: credentials

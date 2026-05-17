@@ -330,23 +330,30 @@ spec:
                     - dsnSecretRef
               externalSecrets:
                 description: |
-                  ExternalSecrets Operator integration. AuthStack projects two
-                  durable values — `masterkey` and `admin-password` — from a
-                  single AWS SM secret keyed by `secretPath`. Both values are
-                  seeded together by `hops auth bootstrap <cluster>` and live
-                  as JSON properties under one AWS SM entry:
+                  ExternalSecrets Operator integration. Two flows:
+
+                  PULL (durable inputs): AuthStack projects `masterkey` and
+                  `admin-password` from a single AWS SM secret keyed by
+                  `secretPath`. Both values are seeded together by
+                  `hops auth bootstrap <cluster>` and live as JSON properties
+                  under one AWS SM entry:
 
                       AWS SM @ <secretPath>:
                         { "masterkey": "...", "admin-password": "..." }
 
-                  Operational state (machine keys, PATs) is NOT projected here
-                  — the Zitadel chart's `FirstInstance` setup job owns those,
-                  re-bootstrapped on each fresh install (which, with embedded
-                  mode, means each AuthStack delete + reapply).
+                  PUSH (operational state): when `pushCredentials.enabled`
+                  (defaults to the top-level `enabled`), AuthStack composes a
+                  PushSecret on the target cluster that publishes the
+                  chart-managed iam-admin PAT to AWS SM at the configured
+                  path/property. Downstream consumers anywhere create their
+                  own `ExternalSecret` + `zitadel.m.crossplane.io
+                  ProviderConfig` referencing that AWS SM path — AuthStack
+                  does NOT compose the PC itself. See
+                  `examples/consumer-providerconfig.yaml`.
                 type: object
                 properties:
                   enabled:
-                    description: Enable ExternalSecret composition. Defaults to false.
+                    description: Enable ExternalSecret + PushSecret composition. Defaults to false.
                     type: boolean
                   secretStoreName:
                     description: Name of the ClusterSecretStore. Defaults to "hops-aws-secrets-manager".
@@ -357,6 +364,40 @@ spec:
                       The remote secret must be a JSON blob with two string
                       properties: `masterkey` and `admin-password`.
                     type: string
+                  pushCredentials:
+                    description: |
+                      Publish the chart-managed iam-admin PAT to AWS SM via
+                      ESO PushSecret. The PAT is written as a property of a
+                      multi-property AWS SM entry; static config fields
+                      (`domain`, `port`, `insecure`) are NOT pushed — consumers
+                      assemble the final `credentials` JSON in their
+                      ExternalSecret template, using `status.oidc.issuerURL`
+                      from this AuthStack as the source of truth for `domain`.
+                    type: object
+                    default: {}
+                    properties:
+                      enabled:
+                        description: |
+                          Compose the PushSecret. Defaults to the top-level
+                          `externalSecrets.enabled` value.
+                        type: boolean
+                      path:
+                        description: |
+                          AWS Secrets Manager path the PAT is pushed to.
+                          Defaults to `push/<clusterName>/zitadel-credentials`.
+                          The top-level `push/` prefix lets the ESO IRSA
+                          role's write IAM permissions be scoped with one
+                          wildcard (`arn:...:secret:push/*`), separate from
+                          the broader read scope used for hand-seeded
+                          durable secrets like `<cluster>/zitadel`.
+                        type: string
+                      accessTokenProperty:
+                        description: |
+                          Property key within the AWS SM entry that holds the
+                          PAT. Defaults to `access_token` to match the
+                          Terraform provider's attribute name (see
+                          [[reference-zitadel-pc-credentials-shape]]).
+                        type: string
               gateway:
                 description: Gateway API routing for the Zitadel install. When enabled, drives the chart's gateway.httpRoute and gateway.grpcRoute. When disabled, the chart's ClusterIP service is left for the consumer to wire.
                 type: object
@@ -402,6 +443,22 @@ spec:
                     type: string
                   discoveryURL:
                     description: OIDC discovery URL (issuer + /.well-known/openid-configuration).
+                    type: string
+              providerConfig:
+                description: |
+                  Where to find the iam-admin PAT in AWS Secrets Manager.
+                  Populated when `spec.externalSecrets.pushCredentials.enabled`.
+                  Consumers anywhere build their own ExternalSecret + Zitadel
+                  ProviderConfig referencing this path. See
+                  `examples/consumer-providerconfig.yaml` for the canonical
+                  consumer manifest.
+                type: object
+                properties:
+                  awsSecretsManagerPath:
+                    description: AWS SM secret path holding the PAT (e.g. `<cluster>/pushed/zitadel-credentials`).
+                    type: string
+                  accessTokenProperty:
+                    description: Property key within the AWS SM entry containing the PAT (defaults to `access_token`).
                     type: string
               bootstrap:
                 description: References to chart-managed bootstrap secrets. Populated after the chart's setup hook completes.

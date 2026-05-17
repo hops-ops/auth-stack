@@ -123,17 +123,35 @@
 # ==============================================================================
 # ExternalSecrets integration
 #
-# One AWS SM secret @ $esoPath carries both durable values as JSON
-# properties: `masterkey` and `admin-password`. Both are seeded by
-# `hops auth bootstrap <cluster>`. Operational state (machine keys,
-# PATs) is owned by the chart's FirstInstance setup job and re-
-# bootstrapped on each fresh install.
+# Two flows live under this surface:
+#
+#  PULL (durable inputs): one AWS SM secret @ $esoPath carries `masterkey`
+#  and `admin-password` as JSON properties. Both are seeded by
+#  `hops auth bootstrap <cluster>` and pulled into K8s Secrets via
+#  ExternalSecret resources composed on the target cluster.
+#
+#  PUSH (operational state): the chart-managed iam-admin PAT is pushed
+#  to AWS SM via a PushSecret composed on the target cluster, so that
+#  downstream consumers anywhere (any cluster, any namespace, any GitOps
+#  repo) can declaratively create a ProviderConfig for
+#  `crossplane-contrib/provider-upjet-zitadel` by pulling the PAT from
+#  AWS SM with their own ExternalSecret. AuthStack does NOT compose the
+#  PC itself — that's a consumer concern.
 # ==============================================================================
 {{- $eso := $spec.externalSecrets | default dict }}
 {{- $esoEnabled := $eso.enabled | default false }}
 {{- $esoStoreName := $eso.secretStoreName | default "hops-aws-secrets-manager" }}
 {{- $esoPath := $eso.secretPath | default "" }}
 {{- $adminPwdSecretName := "zitadel-admin-password" }}
+
+# PushSecret: iam-admin PAT → AWS SM
+{{- $pushCreds := $eso.pushCredentials | default dict }}
+{{- $pushCredsEnabled := $esoEnabled }}
+{{- if hasKey $pushCreds "enabled" }}
+  {{- $pushCredsEnabled = $pushCreds.enabled }}
+{{- end }}
+{{- $pushCredsPath := $pushCreds.path | default (printf "push/%s/zitadel-credentials" $clusterName) }}
+{{- $pushCredsProperty := $pushCreds.accessTokenProperty | default "access_token" }}
 
 # ==============================================================================
 # Gateway routing
@@ -163,7 +181,10 @@
 # ==============================================================================
 {{- $state := dict
   "name" $name
+  "kind" $xr.kind
+  "apiVersion" $xr.apiVersion
   "clusterName" $clusterName
+  "xrNamespace" ($metadata.namespace | default "default")
   "namespace" $namespace
   "managementPolicies" $managementPolicies
   "labels" $labels
@@ -233,6 +254,11 @@
     "secretStoreName" $esoStoreName
     "secretPath" $esoPath
     "adminPasswordSecretName" $adminPwdSecretName
+    "pushCredentials" (dict
+      "enabled" $pushCredsEnabled
+      "path" $pushCredsPath
+      "accessTokenProperty" $pushCredsProperty
+    )
   )
   "gateway" (dict
     "enabled" $gwEnabled

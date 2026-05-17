@@ -380,6 +380,214 @@ _items = [
         }
     }
 
+
+    # ==========================================================================
+    # Test 7a: externalSecrets.enabled=false — no PushSecret composed.
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "pushsecret-disabled-without-externalsecrets"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = stacksv1alpha1.AuthStack {
+                metadata.name = "no-push"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "helm.m.crossplane.io/v1beta1"
+                    kind = "Release"
+                    metadata.name = "no-push-zitadel"
+                }
+            ]
+        }
+    }
+
+    # ==========================================================================
+    # Test 7b: externalSecrets.enabled=true composes the iam-admin PAT
+    # PushSecret on the target cluster with the default AWS SM path
+    # `<clusterName>/pushed/zitadel-credentials` and property `access_token`.
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "pushsecret-defaults-from-externalsecrets-enabled"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = stacksv1alpha1.AuthStack {
+                metadata.name = "ps-defaults"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    externalSecrets = {
+                        enabled = True
+                        secretPath = "test/zitadel"
+                    }
+                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "ps-defaults-credentials-pushsecret"
+                    spec = {
+                        forProvider.manifest = {
+                            apiVersion = "external-secrets.io/v1alpha1"
+                            kind = "PushSecret"
+                            metadata = {
+                                name = "zitadel-iam-admin-pat"
+                                namespace = "zitadel"
+                            }
+                            spec = {
+                                refreshInterval = "1h"
+                                secretStoreRefs = [{
+                                    name = "hops-aws-secrets-manager"
+                                    kind = "ClusterSecretStore"
+                                }]
+                                selector.secret.name = "iam-admin-pat"
+                                data = [{
+                                    match = {
+                                        secretKey = "pat"
+                                        remoteRef = {
+                                            remoteKey = "push/test-cluster/zitadel-credentials"
+                                            property = "access_token"
+                                        }
+                                    }
+                                    # AWS SM tag set: composition defaults + AuthStack labels.
+                                    metadata = {
+                                        apiVersion = "kubernetes.external-secrets.io/v1alpha1"
+                                        kind = "PushSecretMetadata"
+                                        spec.tags = {
+                                            "hops.ops.com.ai/apiVersion" = "hops.ops.com.ai/v1alpha1"
+                                            "hops.ops.com.ai/authstack" = "ps-defaults"
+                                            "hops.ops.com.ai/cluster" = "test-cluster"
+                                            "hops.ops.com.ai/kind" = "AuthStack"
+                                            "hops.ops.com.ai/managed" = "true"
+                                            "hops.ops.com.ai/managed-by" = "pushsecret"
+                                            "hops.ops.com.ai/name" = "ps-defaults"
+                                            "hops.ops.com.ai/namespace" = "default"
+                                            "hops.ops.com.ai/secret" = "true"
+                                        }
+                                    }
+                                }]
+                            }
+                        }
+                        providerConfigRef = {
+                            name = "test-cluster"
+                            kind = "ProviderConfig"
+                        }
+                    }
+                }
+            ]
+        }
+    }
+
+    # ==========================================================================
+    # Test 7c: explicit pushCredentials overrides (path + property).
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "pushsecret-explicit-path-and-property"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = stacksv1alpha1.AuthStack {
+                metadata.name = "ps-explicit"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    externalSecrets = {
+                        enabled = True
+                        secretPath = "test/zitadel"
+                        pushCredentials = {
+                            enabled = True
+                            path = "team-a/zitadel/iam-admin-credentials"
+                            accessTokenProperty = "pat"
+                        }
+                    }
+                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "ps-explicit-credentials-pushsecret"
+                    spec.forProvider.manifest.spec.data = [{
+                        match = {
+                            secretKey = "pat"
+                            remoteRef = {
+                                remoteKey = "team-a/zitadel/iam-admin-credentials"
+                                property = "pat"
+                            }
+                        }
+                    }]
+                }
+            ]
+        }
+    }
+
+    # ==========================================================================
+    # Test 7d: pushCredentials.enabled=false explicitly disables PushSecret
+    # even when externalSecrets.enabled=true.
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "pushsecret-explicitly-disabled"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = stacksv1alpha1.AuthStack {
+                metadata.name = "ps-off"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    externalSecrets = {
+                        enabled = True
+                        secretPath = "test/zitadel"
+                        pushCredentials.enabled = False
+                    }
+                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                }
+            }
+            assertResources = [
+                # ExternalSecret for masterkey still composed (externalSecrets.enabled),
+                # but no credentials-pushsecret Object.
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "ps-off-external-secret-masterkey"
+                }
+            ]
+        }
+    }
+
     # ==========================================================================
     # Test 6: FirstInstance username override flows into chart values
     # ==========================================================================
