@@ -9,7 +9,7 @@ metadata:
 spec:
   dependsOn:
   - function: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
-    version: '>=v0.6.3'
+    version: '>=v0.6.4'
   - provider: xpkg.crossplane.io/crossplane-contrib/provider-helm
     version: '>=v1'
   - provider: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes
