@@ -1,7 +1,8 @@
 # Local-dev manifest for colima.
 # Pairs with: a `PSQLCluster` named `zitadel-pg` whose `app.externalSecret`
-# pulls credentials from AWS SM at `zitadel/app`, and a masterkey at
-# `zitadel/masterkey` synced via `hops secrets sync aws`.
+# pulls credentials from AWS SM at `zitadel/app`, and a masterkey +
+# admin-password under a single AWS SM entry at `zitadel/credentials`
+# synced via `hops secrets sync aws`.
 apiVersion: hops.ops.com.ai/v1alpha1
 kind: AuthStack
 metadata:
@@ -12,11 +13,13 @@ spec:
   domain: auth.localtest.me
   externalSecure: false
 
+  # PULL flow: AuthStack ExternalSecret pulls masterkey + admin-password
+  # from a single AWS SM JSON blob keyed by secretPath. Both values are
+  # seeded together by `hops auth bootstrap <cluster>`.
   externalSecrets:
     enabled: true
     secretStoreName: hops-aws-secrets-manager
-    masterkey:
-      secretPath: zitadel/masterkey
+    secretPath: zitadel/credentials
 
   firstInstance:
     org: hops-ops

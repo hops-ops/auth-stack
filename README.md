@@ -1,6 +1,10 @@
 # auth-stack
 
-Installs Zitadel into a Kubernetes cluster as the platform identity provider. Wraps the upstream `zitadel/zitadel` Helm chart with a typed XRD surface that handles the namespace, the database wiring, Gateway API routing, and re-projects the chart-managed bootstrap secrets (admin PAT + login-client PAT) into XR status for downstream consumers.
+Installs Zitadel into a Kubernetes cluster as the platform identity provider, and hosts a focused set of `auth.hops.ops.com.ai` primitive XRDs (`HumanUser`, `MachineUser`, `Grant`, `IDP`) that compose against the installed Zitadel.
+
+The stack XRD (`AuthStack`) wraps the upstream `zitadel/zitadel` Helm chart — handling the namespace, database wiring, Gateway API routing, and re-projecting chart-managed bootstrap secrets (admin PAT + login-client PAT) into XR status for downstream consumers.
+
+The primitive XRDs let operators declaratively manage the identity model inside a running Zitadel — see [Auth-group primitives](#auth-group-primitives) below.
 
 ## Quick Start
 
@@ -75,6 +79,21 @@ status:
     iamAdminKeySecretRef:    { name: iam-admin,      namespace: zitadel, key: key }
     loginClientPatSecretRef: { name: login-client,   namespace: zitadel, key: pat }
 ```
+
+## Auth-group primitives
+
+Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `HumanUser`, `MachineUser`, `Grant`, `IDP` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
+
+Status:
+
+| Kind | Plural | Composes | Status |
+|---|---|---|---|
+| `HumanUser` | `humanusers` | `HumanUser` + optional `UserIDPLink` MRs | TO WRITE |
+| `MachineUser` | `machineusers` | `MachineUser` + `PAT` + AWS SM push pipeline | TO WRITE |
+| `Grant` | `grants` | `ProjectMember` (same-Org) or `ProjectGrant + GrantMember` (cross-Org) | TO WRITE |
+| `IDP` | `idps` | polymorphic over `GoogleIDP` / `GitHubIDP` / `OIDCIDP` / `SAMLIDP` | TO WRITE |
+
+Operators apply raw Zitadel `Org` / `Project` / `Role` MRs (`org.zitadel.m.crossplane.io`, `project.zitadel.m.crossplane.io`) directly when they need them — the `Tenant` business kind in [[tenant-stack]] composes the initial set during Tenant scaffolding.
 
 ## Cross-Stack Integration
 

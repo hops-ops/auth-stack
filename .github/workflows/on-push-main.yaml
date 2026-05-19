@@ -23,22 +23,21 @@ permissions:
 
 jobs:
   validate:
-    uses: unbounded-tech/workflows-crossplane/.github/workflows/validate.yaml@v2.20.0
+    uses: hops-ops/workflows-crossplane/.github/workflows/validate.yaml@v3.0.0
     with:
       examples: |
         [
-          { "example": "examples/authstacks/minimal.yaml" },
-          { "example": "examples/authstacks/standard.yaml" },
-          { "example": "examples/authstacks/local-colima.yaml" }
+          { "example": "examples/authstacks/minimal.yaml",      "api_path": "apis/authstacks" },
+          { "example": "examples/authstacks/standard.yaml",     "api_path": "apis/authstacks" },
+          { "example": "examples/authstacks/local-colima.yaml", "api_path": "apis/authstacks" }
         ]
-      api_path: apis/authstacks
       error_on_missing_schemas: true
 
   test:
-    uses: unbounded-tech/workflows-crossplane/.github/workflows/test.yaml@v2.20.0
+    uses: hops-ops/workflows-crossplane/.github/workflows/test.yaml@v3.0.0
 
   e2e:
-    uses: unbounded-tech/workflows-crossplane/.github/workflows/e2e.yaml@v2.20.0
+    uses: hops-ops/workflows-crossplane/.github/workflows/e2e.yaml@v3.0.0
 
   version-and-tag:
     name: Version and Tag
