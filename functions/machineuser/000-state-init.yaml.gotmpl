@@ -1,0 +1,134 @@
+# code: language=yaml
+#
+# Initialize $state with spec defaults.
+#
+
+{{- $xr := getCompositeResource . }}
+{{- $spec := $xr.spec | default dict }}
+{{- $metadata := $xr.metadata | default dict }}
+
+# ==============================================================================
+# Core
+# ==============================================================================
+{{- $name := $metadata.name }}
+{{- $namespace := $metadata.namespace | default "default" }}
+{{- $managementPolicies := $spec.managementPolicies | default (list "*") }}
+
+{{- $userName := $spec.userName | default "" }}
+{{- if eq $userName "" }}
+  {{- $userName = $name }}
+{{- end }}
+
+{{- $displayName := $spec.displayName | default "" }}
+{{- if eq $displayName "" }}
+  {{- $displayName = $name }}
+{{- end }}
+
+{{- $description := $spec.description | default "" }}
+{{- $accessTokenType := $spec.accessTokenType | default "ACCESS_TOKEN_TYPE_JWT" }}
+
+{{- $orgId := $spec.orgId }}
+{{- $machineUserId := $spec.machineUserId | default "" }}
+
+# ==============================================================================
+# PAT config
+# ==============================================================================
+{{- $patSpec := $spec.pat | default dict }}
+{{- $patEnabled := $patSpec.enabled | default false }}
+{{- $patExpiration := $patSpec.expirationDate | default "" }}
+{{- $patPushToAwsSm := $patSpec.pushToAwsSm | default false }}
+
+{{- $awsSm := $patSpec.awsSm | default dict }}
+{{- $awsSmCluster := $awsSm.cluster | default "" }}
+{{- $awsSmTenant := $awsSm.tenant | default "" }}
+{{- if eq $awsSmTenant "" }}
+  {{- $awsSmTenant = $namespace }}
+{{- end }}
+{{- $awsSmRegion := $awsSm.region | default "" }}
+
+{{- $awsSmPcSpec := $awsSm.providerConfigRef | default dict }}
+{{- $awsSmPcName := $awsSmPcSpec.name | default "" }}
+{{- $awsSmPcKind := $awsSmPcSpec.kind | default "ProviderConfig" }}
+
+{{- $eso := $awsSm.eso | default dict }}
+{{- $esoStoreName := $eso.storeName | default "aws-secrets-manager-platform" }}
+{{- $esoStoreKind := $eso.storeKind | default "ClusterSecretStore" }}
+{{- $esoDeletionPolicy := $eso.deletionPolicy | default "Delete" }}
+
+{{- $esoK8sPcSpec := $eso.kubernetesProviderConfigRef | default dict }}
+{{- $esoK8sPcName := $esoK8sPcSpec.name | default "" }}
+{{- if eq $esoK8sPcName "" }}
+  {{- $esoK8sPcName = $awsSmCluster }}
+{{- end }}
+{{- $esoK8sPcKind := $esoK8sPcSpec.kind | default "ProviderConfig" }}
+
+# AWS SM external-name (the path)
+{{- $awsSmPath := "" }}
+{{- if and $patEnabled $patPushToAwsSm }}
+  {{- $awsSmPath = printf "push/%s/%s/%s" $awsSmCluster $awsSmTenant $name }}
+{{- end }}
+
+# ==============================================================================
+# Zitadel ProviderConfig (no convention default — required)
+# ==============================================================================
+{{- $zitadelPcSpec := $spec.providerConfigRef }}
+{{- $zitadelPcName := $zitadelPcSpec.name }}
+{{- $zitadelPcKind := $zitadelPcSpec.kind | default "ProviderConfig" }}
+
+# ==============================================================================
+# Connection secret name (control plane K8s)
+# ==============================================================================
+{{- $patSecretName := printf "%s-pat" $name }}
+
+# ==============================================================================
+# Labels
+# ==============================================================================
+{{- $defaultLabels := dict
+  "hops.ops.com.ai/managed" "true"
+  "hops.ops.com.ai/auth-machineuser" $name
+}}
+{{- $labels := merge $defaultLabels ($spec.labels | default dict) }}
+
+# ==============================================================================
+# $state
+# ==============================================================================
+{{- $state := dict
+  "name" $name
+  "namespace" $namespace
+  "userName" $userName
+  "displayName" $displayName
+  "description" $description
+  "accessTokenType" $accessTokenType
+  "orgId" $orgId
+  "machineUserId" $machineUserId
+  "managementPolicies" $managementPolicies
+  "labels" $labels
+
+  "pat" (dict
+    "enabled" $patEnabled
+    "expirationDate" $patExpiration
+    "pushToAwsSm" $patPushToAwsSm
+    "secretName" $patSecretName
+    "awsSm" (dict
+      "cluster" $awsSmCluster
+      "tenant" $awsSmTenant
+      "region" $awsSmRegion
+      "path" $awsSmPath
+      "providerConfigName" $awsSmPcName
+      "providerConfigKind" $awsSmPcKind
+      "esoStoreName" $esoStoreName
+      "esoStoreKind" $esoStoreKind
+      "esoDeletionPolicy" $esoDeletionPolicy
+      "esoK8sProviderConfigName" $esoK8sPcName
+      "esoK8sProviderConfigKind" $esoK8sPcKind
+    )
+  )
+
+  "zitadelProviderConfig" (dict
+    "name" $zitadelPcName
+    "kind" $zitadelPcKind
+  )
+
+  "observed" (dict)
+  "status" (dict)
+}}

@@ -1,0 +1,19 @@
+# MachineUser with PAT — opt-in. Composes MachineUser MR + AccessToken
+# MR. The PAT lands on the control-plane K8s as a Secret under the key
+# `access_token`. No AWS SM push — consumers on the same cluster as the
+# control plane can `secretKeyRef` directly.
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: MachineUser
+metadata:
+  name: ci-bot
+  namespace: default
+spec:
+  orgId: "373268222482392664"
+  displayName: "CI Bot"
+  description: "GitHub Actions CI bot for the platform repos"
+  accessTokenType: ACCESS_TOKEN_TYPE_JWT
+  pat:
+    enabled: true
+  providerConfigRef:
+    name: zitadel-tenant-stack
+    kind: ProviderConfig

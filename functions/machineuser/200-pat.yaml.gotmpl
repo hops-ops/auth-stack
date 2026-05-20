@@ -1,0 +1,41 @@
+# code: language=yaml
+#
+# Zitadel AccessToken (PAT) — gated on spec.pat.enabled AND observed
+# MachineUser.atProvider.id. Multi-iteration: MachineUser composes first,
+# AccessToken emits once userId is observed (atProvider.id populated).
+#
+# Connection secret lands on the CONTROL plane K8s under
+# spec.pat.secretName with key `access_token` (per
+# reference_zitadel_pc_credentials_shape). Cross-cluster bridging is
+# handled separately by 300-aws-sm-secret + 310-eso-pushsecret.
+#
+
+{{- if and $state.pat.enabled (ne $state.observed.userId "") }}
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: AccessToken
+metadata:
+  name: {{ printf "%s-pat" $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "pat" }}
+  labels:
+    {{- range $k, $v := $state.labels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    hops.ops.com.ai/auth-machineuser: {{ $state.name | quote }}
+spec:
+  forProvider:
+    orgId: {{ $state.orgId | quote }}
+    userId: {{ $state.observed.userId | quote }}
+    {{- if ne $state.pat.expirationDate "" }}
+    expirationDate: {{ $state.pat.expirationDate | quote }}
+    {{- end }}
+  # Crossplane v2 namespaced MR — connection secret lands in this MR's
+  # namespace automatically; only the name is needed.
+  writeConnectionSecretToRef:
+    name: {{ $state.pat.secretName | quote }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  providerConfigRef:
+    name: {{ $state.zitadelProviderConfig.name | quote }}
+    kind: {{ $state.zitadelProviderConfig.kind | quote }}
+{{- end }}

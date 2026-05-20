@@ -1,0 +1,265 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: machineusers.auth.hops.ops.com.ai
+spec:
+  group: auth.hops.ops.com.ai
+  names:
+    kind: MachineUser
+    plural: machineusers
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    referenceable: true
+    served: true
+    schema:
+      openAPIV3Schema:
+        description: |
+          MachineUser is a declarative Zitadel machine identity used by
+          CI runners, Crossplane providers, cross-cluster syncs — anything
+          that needs a long-lived credential to call a SaaS API.
+
+          Composes the underlying Zitadel MachineUser MR always. PAT
+          generation is OPT-IN (`spec.pat.enabled: true`) — operators
+          explicitly acknowledge they're minting a long-lived bearer
+          token. AWS Secrets Manager push (for cross-cluster pull via
+          ESO ExternalSecret) is a further opt-in
+          (`spec.pat.pushToAwsSm: true`).
+
+          Adoption: set spec.machineUserId to the existing Zitadel
+          machine-user UUID; it propagates as the composed MR's
+          crossplane.io/external-name. Pair with
+          managementPolicies excluding Create.
+
+          See [[specs/machine-user-xrd]] for the design.
+        type: object
+        properties:
+          spec:
+            description: MachineUserSpec defines the desired state.
+            type: object
+            properties:
+              orgId:
+                description: |
+                  Underlying Zitadel Org UUID. Operator copies from the
+                  parent Tenant's status.identity.zitadel.orgId.
+                type: string
+
+              userName:
+                description: |
+                  Login name for the machine user. Defaults to metadata.name
+                  when empty.
+                type: string
+                default: ""
+
+              displayName:
+                description: |
+                  Human-readable name shown in Zitadel dashboard. Defaults
+                  to metadata.name when empty.
+                type: string
+                default: ""
+
+              description:
+                description: |
+                  Description of what this machine identity is used for —
+                  e.g., "provider-upjet-zitadel reconciler post-bootstrap".
+                type: string
+                default: ""
+
+              accessTokenType:
+                description: |
+                  Zitadel access-token type for this machine user. JWT is
+                  self-contained + signed; BEARER is opaque + introspected.
+                type: string
+                enum: ["ACCESS_TOKEN_TYPE_JWT", "ACCESS_TOKEN_TYPE_BEARER"]
+                default: "ACCESS_TOKEN_TYPE_JWT"
+
+              machineUserId:
+                description: |
+                  Existing Zitadel machine-user UUID. When set, propagates
+                  as the composed MachineUser MR's
+                  crossplane.io/external-name annotation (adoption pattern).
+                type: string
+                default: ""
+
+              pat:
+                description: |
+                  Personal Access Token generation. DISABLED by default —
+                  operators must explicitly opt in. PAT generation mints a
+                  long-lived bearer token; the connection secret lands on
+                  the control plane K8s (per Crossplane v2 connection-secret
+                  semantics, NOT on whichever cluster provider-upjet-zitadel
+                  targets).
+                type: object
+                properties:
+                  enabled:
+                    description: |
+                      Set true to compose an AccessToken MR (the PAT).
+                      Connection secret written to control-plane K8s
+                      under key `attribute.token` (the upstream
+                      provider-upjet-zitadel attribute name). Consumers
+                      either read that key directly OR — for cross-cluster
+                      pull — enable pushToAwsSm and the ESO PushSecret
+                      renames to `access_token` per the conventional
+                      Zitadel PC credential key. Default false.
+                    type: boolean
+                    default: false
+                  expirationDate:
+                    description: |
+                      Optional ISO-8601 expiration timestamp for the PAT.
+                      Empty = no expiration (Zitadel server default).
+                    type: string
+                    default: ""
+                  pushToAwsSm:
+                    description: |
+                      When true (and pat.enabled is true), composes an AWS
+                      Secrets Manager Secret MR + an ESO PushSecret
+                      Kubernetes Object that pushes the control-plane K8s
+                      Secret's access_token property to AWS SM. Consumer
+                      clusters then pull via ESO ExternalSecret. Uses the
+                      push/<cluster>/<tenant>/<name> path convention from
+                      [[reference-aws-sm-push-tag-convention]].
+                    type: boolean
+                    default: false
+                  awsSm:
+                    description: |
+                      AWS Secrets Manager push configuration. Required when
+                      pushToAwsSm is true.
+                    type: object
+                    properties:
+                      cluster:
+                        description: |
+                          Destination cluster identifier (becomes part of
+                          the path: push/<cluster>/<tenant>/<name>).
+                        type: string
+                      tenant:
+                        description: |
+                          Tenant identifier (becomes part of the path).
+                          Defaults to metadata.namespace when empty.
+                        type: string
+                        default: ""
+                      region:
+                        description: AWS region for the SM Secret.
+                        type: string
+                      providerConfigRef:
+                        description: |
+                          ProviderConfig for provider-aws-secretsmanager.
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          kind:
+                            type: string
+                            default: "ProviderConfig"
+                      eso:
+                        description: |
+                          ESO SecretStore config for the PushSecret.
+                        type: object
+                        properties:
+                          storeName:
+                            description: |
+                              Name of the ClusterSecretStore. Defaults to
+                              "aws-secrets-manager-platform".
+                            type: string
+                            default: "aws-secrets-manager-platform"
+                          storeKind:
+                            type: string
+                            enum: ["SecretStore", "ClusterSecretStore"]
+                            default: "ClusterSecretStore"
+                          deletionPolicy:
+                            description: |
+                              ESO PushSecret deletion policy. Delete tears
+                              down the AWS SM Secret when the PushSecret is
+                              removed; Retain leaves it for audit.
+                            type: string
+                            enum: ["Delete", "Retain"]
+                            default: "Delete"
+                          kubernetesProviderConfigRef:
+                            description: |
+                              ProviderConfig for provider-kubernetes (the
+                              cluster hosting ESO). Defaults to the same
+                              cluster identifier in awsSm.cluster.
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              kind:
+                                type: string
+                                default: "ProviderConfig"
+
+              providerConfigRef:
+                description: |
+                  ProviderConfig for provider-upjet-zitadel. No convention
+                  default — operator supplies explicitly.
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    default: "ProviderConfig"
+
+              managementPolicies:
+                description: |
+                  Crossplane managementPolicies for all composed resources.
+                  Defaults to ["*"]. For adoption flows, set to
+                  ["Observe", "Update", "LateInitialize"].
+                type: array
+                items:
+                  type: string
+                default: ["*"]
+
+              labels:
+                description: |
+                  Custom labels merged with stack defaults; applied to every
+                  composed resource.
+                type: object
+                additionalProperties:
+                  type: string
+                x-kubernetes-preserve-unknown-fields: true
+
+            required:
+            - orgId
+            - providerConfigRef
+
+          status:
+            type: object
+            properties:
+              userId:
+                description: Underlying Zitadel machine-user UUID.
+                type: string
+              loginName:
+                description: |
+                  User's login name (typically userName + Org domain).
+                type: string
+              pat:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  tokenId:
+                    description: Underlying Zitadel AccessToken UUID.
+                    type: string
+                  controlPlaneSecretRef:
+                    description: |
+                      Connection-secret ref on the control plane (where
+                      provider-upjet-zitadel wrote the PAT under key
+                      access_token).
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                  awsSm:
+                    description: |
+                      AWS SM Secret ARN + path when pushToAwsSm: true.
+                    type: object
+                    properties:
+                      secretArn:
+                        type: string
+                      secretName:
+                        type: string
+              ready:
+                type: boolean
+        required:
+        - spec

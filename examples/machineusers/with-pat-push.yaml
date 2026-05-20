@@ -1,0 +1,37 @@
+# MachineUser with PAT + AWS SM push pipeline — the full 4-MR composition:
+#   1. MachineUser MR (Zitadel)
+#   2. AccessToken MR (Zitadel) — PAT lands on control-plane K8s
+#   3. AWS Secrets Manager Secret MR — empty Secret at the convention path
+#      push/<cluster>/<tenant>/<name>
+#   4. ESO PushSecret (via provider-kubernetes Object) — pushes the
+#      control-plane K8s Secret's access_token property into the AWS SM
+#      Secret. Consumer clusters pull via ESO ExternalSecret.
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: MachineUser
+metadata:
+  name: openpanel-provider
+  namespace: default
+spec:
+  orgId: "373268222482392664"
+  displayName: "OpenPanel Provider"
+  description: "provider-upjet-openpanel reconciler /manage credential"
+  accessTokenType: ACCESS_TOKEN_TYPE_JWT
+  pat:
+    enabled: true
+    pushToAwsSm: true
+    awsSm:
+      cluster: pat-local
+      tenant: ops-com-ai
+      region: us-east-1
+      providerConfigRef:
+        name: aws-platform
+        kind: ProviderConfig
+      eso:
+        storeName: aws-secrets-manager-platform
+        storeKind: ClusterSecretStore
+        kubernetesProviderConfigRef:
+          name: pat-local
+          kind: ProviderConfig
+  providerConfigRef:
+    name: zitadel-tenant-stack
+    kind: ProviderConfig

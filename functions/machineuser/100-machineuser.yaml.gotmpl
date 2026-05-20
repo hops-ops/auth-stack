@@ -1,0 +1,32 @@
+# code: language=yaml
+#
+# Zitadel MachineUser (machineusers.user.zitadel.m.crossplane.io).
+# Always composed.
+#
+# Adoption: spec.machineUserId propagates as external-name annotation.
+#
+
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: MachineUser
+metadata:
+  name: {{ $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "machineuser" }}
+    {{- if ne $state.machineUserId "" }}
+    crossplane.io/external-name: {{ $state.machineUserId | quote }}
+    {{- end }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  forProvider:
+    orgId: {{ $state.orgId | quote }}
+    userName: {{ $state.userName | quote }}
+    name: {{ $state.displayName | quote }}
+    {{- if ne $state.description "" }}
+    description: {{ $state.description | quote }}
+    {{- end }}
+    accessTokenType: {{ $state.accessTokenType | quote }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  providerConfigRef:
+    name: {{ $state.zitadelProviderConfig.name | quote }}
+    kind: {{ $state.zitadelProviderConfig.kind | quote }}

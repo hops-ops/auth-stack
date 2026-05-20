@@ -1,0 +1,14 @@
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: MachineUser
+metadata:
+  name: openpanel-provider
+  annotations:
+    crossplane.io/composition-resource-name: machineuser
+status:
+  atProvider:
+    id: "373597474725571419"
+    loginName: "openpanel-provider@ops-com-ai.zitadel.example"
+  conditions:
+    - type: Ready
+      status: "True"
