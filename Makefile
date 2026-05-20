@@ -1,28 +1,28 @@
 SHELL := /bin/bash
 
 PACKAGE ?= auth-stack
+# Default XRD_DIR for legacy single-API targets; multi-API targets derive per-example.
 XRD_DIR := apis/authstacks
 COMPOSITION := $(XRD_DIR)/composition.yaml
 DEFINITION := $(XRD_DIR)/definition.yaml
-CONFIGURATION := $(XRD_DIR)/configuration.yaml
 EXAMPLE_DEFAULT := examples/authstacks/standard.yaml
 RENDER_TESTS := $(wildcard tests/test-*)
 E2E_TESTS := $(wildcard tests/e2etest-*)
 
+# Multi-API support: examples/<apiplural>/<example>.yaml maps to apis/<apiplural>/.
+# Helper macro: api_dir_for(example_path) → apis/<dirname>
+api-dir = apis/$(word 2,$(subst /, ,$(1)))
+
 clean:
 	rm -rf _output
 	rm -rf .up
-	rm -f $(CONFIGURATION)
 
 build:
 	up project build
 
-generate-configuration:
-	@set -euo pipefail; \
-	hops validate generate-configuration --path . --api-path "$(XRD_DIR)"
-
 # Examples list - mirrors GitHub Actions workflow
 # Format: example_path::observed_resources_path (observed_resources_path is optional)
+# api_path is derived from example_path via the api-dir macro (examples/<x>/... → apis/<x>/).
 EXAMPLES := \
     examples/authstacks/minimal.yaml:: \
     examples/authstacks/standard.yaml:: \
@@ -35,14 +35,17 @@ render\:all:
 	for entry in $(EXAMPLES); do \
 		example=$${entry%%::*}; \
 		observed=$${entry#*::}; \
+		api_dir=$$(echo "$$example" | awk -F/ '{print "apis/" $$2}'); \
+		composition="$$api_dir/composition.yaml"; \
+		definition="$$api_dir/definition.yaml"; \
 		outfile="$$tmpdir/$$(echo $$entry | tr '/:' '__')"; \
 		( \
 			if [ -n "$$observed" ]; then \
 				echo "=== Rendering $$example with observed-resources $$observed ==="; \
-				up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example --observed-resources=$$observed; \
+				up composition render --xrd=$$definition $$composition $$example --observed-resources=$$observed; \
 			else \
-				echo "=== Rendering $$example ==="; \
-				up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example; \
+				echo "=== Rendering $$example (api=$$api_dir) ==="; \
+				up composition render --xrd=$$definition $$composition $$example; \
 			fi; \
 			echo "" \
 		) > "$$outfile" 2>&1 & \
@@ -59,24 +62,27 @@ render\:all:
 	exit $$failed
 
 # Validate all examples (parallel execution, output shown per-job when complete)
-validate\:all: generate-configuration
+validate\:all:
 	@tmpdir=$$(mktemp -d); \
 	pids=""; \
 	for entry in $(EXAMPLES); do \
 		example=$${entry%%::*}; \
 		observed=$${entry#*::}; \
+		api_dir=$$(echo "$$example" | awk -F/ '{print "apis/" $$2}'); \
+		composition="$$api_dir/composition.yaml"; \
+		definition="$$api_dir/definition.yaml"; \
 		outfile="$$tmpdir/$$(echo $$entry | tr '/:' '__')"; \
 		( \
 			if [ -n "$$observed" ]; then \
 				echo "=== Validating $$example with observed-resources $$observed ==="; \
-				up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example \
+				up composition render --xrd=$$definition $$composition $$example \
 					--observed-resources=$$observed --include-full-xr --quiet | \
-					crossplane beta validate $(XRD_DIR) --error-on-missing-schemas -; \
+					crossplane beta validate $$api_dir --error-on-missing-schemas -; \
 			else \
-				echo "=== Validating $$example ==="; \
-				up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example \
+				echo "=== Validating $$example (api=$$api_dir) ==="; \
+				up composition render --xrd=$$definition $$composition $$example \
 					--include-full-xr --quiet | \
-					crossplane beta validate $(XRD_DIR) --error-on-missing-schemas -; \
+					crossplane beta validate $$api_dir --error-on-missing-schemas -; \
 			fi; \
 			echo "" \
 		) > "$$outfile" 2>&1 & \
@@ -93,16 +99,16 @@ validate\:all: generate-configuration
 	exit $$failed
 
 # Shorthand aliases
-.PHONY: render validate generate-configuration
+.PHONY: clean build test e2e publish render validate
 render: ; @$(MAKE) 'render:all'
-validate: ; @$(MAKE) generate-configuration 'validate:all'
+validate: ; @$(MAKE) 'validate:all'
 
-# Single example targets
+# Single example targets (legacy — uses default XRD_DIR for examples/authstacks/<name>.yaml)
 render\:%:
 	@example="examples/authstacks/$*.yaml"; \
 	up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example
 
-validate\:%: generate-configuration
+validate\:%:
 	@example="examples/authstacks/$*.yaml"; \
 	up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example \
 		--include-full-xr --quiet | \
@@ -113,3 +119,7 @@ test:
 
 e2e:
 	up test run $(E2E_TESTS) --e2e
+
+publish:
+	@if [ -z "$(tag)" ]; then echo "Error: tag is not set. Usage: make publish tag=<version>"; exit 1; fi
+	up project build --push --tag $(tag)

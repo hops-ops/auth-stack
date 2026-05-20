@@ -18,7 +18,8 @@ spec:
     version: '>=v1'
   description: AuthStack installs Zitadel as the platform identity provider via the
     upstream Helm chart, with typed integration points for PostgreSQL and Gateway
-    API.
+    API. Also hosts a focused set of auth.hops.ops.com.ai primitive XRDs (HumanUser,
+    MachineUser, Grant, IDP) that compose against the installed Zitadel.
   license: Apache-2.0
   maintainer: Patrick Lee Scott <pat@patscott.io>
   readme: |
