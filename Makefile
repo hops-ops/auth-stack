@@ -29,7 +29,9 @@ EXAMPLES := \
     examples/authstacks/local-colima.yaml:: \
     examples/machineusers/minimal.yaml:: \
     examples/machineusers/with-pat.yaml:: \
-    examples/machineusers/with-pat-push.yaml::
+    examples/machineusers/with-pat-push.yaml:: \
+    examples/grants/same-org.yaml:: \
+    examples/grants/cross-org.yaml::
 
 # Render all examples (parallel execution, output shown per-job when complete)
 render\:all:

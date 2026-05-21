@@ -27,8 +27,8 @@ spec:
   description: AuthStack installs Zitadel as the platform identity provider via the
     upstream Helm chart, with typed integration points for PostgreSQL and Gateway
     API. Also hosts the auth.hops.ops.com.ai primitive XRDs that wrap multi-resource
-    Zitadel patterns — currently MachineUser (with opt-in PAT + AWS SM push pipeline);
-    Grant planned next.
+    Zitadel patterns — MachineUser (with opt-in PAT + AWS SM push pipeline) and Grant
+    (polymorphic same-Org/cross-Org user-to-project-role assignment).
   license: Apache-2.0
   maintainer: Patrick Lee Scott <pat@patscott.io>
   readme: |

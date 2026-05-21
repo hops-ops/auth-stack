@@ -1,0 +1,27 @@
+# code: language=yaml
+#
+# Project Grant — only composed for cross-Org mode. Authorizes the
+# Project (in projectOrgId) to be granted to the user's home Org
+# (userOrgId) with the requested role set.
+#
+
+{{- if eq $state.mode "cross-org" }}
+---
+apiVersion: project.zitadel.m.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: {{ printf "%s-project-grant" $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "project-grant" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  forProvider:
+    orgId: {{ $state.projectOrgId | quote }}
+    projectId: {{ $state.projectId | quote }}
+    grantedOrgId: {{ $state.userOrgId | quote }}
+    roleKeys: {{ $state.roles | toJson }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  providerConfigRef:
+    name: {{ $state.providerConfigName | quote }}
+    kind: {{ $state.providerConfigKind | quote }}
+{{- end }}

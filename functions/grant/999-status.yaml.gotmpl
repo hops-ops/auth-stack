@@ -1,0 +1,16 @@
+# code: language=yaml
+#
+# Output XR status.
+#
+
+{{- $xr := getCompositeResource . }}
+---
+apiVersion: {{ $xr.apiVersion }}
+kind: {{ $xr.kind }}
+status:
+  ready: {{ $state.status.ready }}
+  mode: {{ $state.status.mode | quote }}
+  userGrantId: {{ $state.status.userGrantId | default "" | quote }}
+  {{- if eq $state.mode "cross-org" }}
+  projectGrantId: {{ $state.status.projectGrantId | default "" | quote }}
+  {{- end }}
