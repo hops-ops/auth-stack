@@ -1,0 +1,46 @@
+# code: language=yaml
+#
+# Extract observed state for multi-iter gating + status emission.
+#
+
+{{- $observed := $.observed.resources | default dict }}
+
+# Project Grant (only relevant in cross-org mode)
+{{- $projectGrantId := "" }}
+{{- $projectGrantReady := true }}
+{{- if eq $state.mode "cross-org" }}
+  {{- $projectGrantReady = false }}
+  {{- $pgEntry := get $observed "project-grant" | default dict }}
+  {{- $pgResource := $pgEntry.resource | default dict }}
+  {{- $pgAtProvider := (($pgResource.status | default dict).atProvider | default dict) }}
+  {{- $projectGrantId = $pgAtProvider.id | default "" }}
+  {{- $pgConditions := (($pgResource.status | default dict).conditions | default list) }}
+  {{- range $pgConditions }}
+    {{- if and (eq .type "Ready") (eq .status "True") }}
+      {{- $projectGrantReady = true }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# User Grant
+{{- $userGrantId := "" }}
+{{- $userGrantReady := false }}
+{{- $ugEntry := get $observed "user-grant" | default dict }}
+{{- $ugResource := $ugEntry.resource | default dict }}
+{{- $ugAtProvider := (($ugResource.status | default dict).atProvider | default dict) }}
+{{- $userGrantId = $ugAtProvider.id | default "" }}
+{{- $ugConditions := (($ugResource.status | default dict).conditions | default list) }}
+{{- range $ugConditions }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}
+    {{- $userGrantReady = true }}
+  {{- end }}
+{{- end }}
+
+{{- $ready := and $projectGrantReady $userGrantReady }}
+
+{{- $_ := set $state.observed "projectGrantId" $projectGrantId }}
+{{- $_ := set $state.observed "userGrantId" $userGrantId }}
+{{- $_ := set $state.status "ready" $ready }}
+{{- $_ := set $state.status "mode" $state.mode }}
+{{- $_ := set $state.status "projectGrantId" $projectGrantId }}
+{{- $_ := set $state.status "userGrantId" $userGrantId }}

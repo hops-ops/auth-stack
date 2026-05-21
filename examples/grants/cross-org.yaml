@@ -1,0 +1,26 @@
+# Cross-Org Grant — the user lives in one Org (pat-brand), the project
+# lives in another (ops-com-ai). Composes TWO MRs:
+#   1. project.zitadel.m.crossplane.io/Grant — authorizes pat-brand's
+#      Org to receive the platform-services Project with the role set
+#      [platform-admin].
+#   2. user.zitadel.m.crossplane.io/Grant — assigns the platform-admin
+#      role to Pat within the Project, referencing the Project Grant
+#      via projectGrantId. Gated on (1) being observed (multi-iter).
+#
+# Both UUIDs in this example are illustrative; real values come from
+# the respective Tenant XRs' status.identity.zitadel.orgId fields.
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: Grant
+metadata:
+  name: pat-platform-admin
+  namespace: default
+spec:
+  userId: "ILLUSTRATIVE-pat-user-uuid"
+  userOrgId: "ILLUSTRATIVE-pat-brand-org-uuid"
+  projectId: "373410628280264299"
+  projectOrgId: "373268222482392664"
+  roles:
+    - "platform-admin"
+  providerConfigRef:
+    name: zitadel-tenant-stack
+    kind: ProviderConfig

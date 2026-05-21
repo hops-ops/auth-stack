@@ -89,7 +89,7 @@ Status:
 | Kind | Plural | Composes | Status |
 |---|---|---|---|
 | `MachineUser` | `machineusers` | `MachineUser` + opt-in `AccessToken` + opt-in AWS SM `Secret` + ESO `PushSecret` (provider-kubernetes Object) | ✓ |
-| `Grant` | `grants` | `ProjectMember` (same-Org) or `ProjectGrant + GrantMember` (cross-Org) | TO WRITE |
+| `Grant` | `grants` | `user.zitadel.../Grant` (same-Org) or `project.zitadel.../Grant + user.zitadel.../Grant` with `projectGrantId` (cross-Org) | ✓ |
 
 Single-resource wrappers we deliberately didn't make: `HumanUser`, `IDP`, `OrganizationSsoConfig` (and the previously-attempted `Organization`, `Project`). Operators apply raw Zitadel / OpenPanel MRs directly for those.
 
@@ -102,6 +102,15 @@ The XRD's value-add is bundling. The `MachineUser` MR alone is one Zitadel resou
 PAT generation is **opt-in by default** — `pat.enabled: false` means no long-lived token is minted. Adoption of an existing Zitadel machine user uses `spec.machineUserId` (propagates as `crossplane.io/external-name` on the underlying MR).
 
 See `examples/machineusers/{minimal,with-pat,with-pat-push}.yaml`.
+
+### `Grant`
+
+First-class membership relationship that ties a Zitadel User to a Project + Roles. Polymorphic dispatch — caller writes `userId + userOrgId + projectId + projectOrgId + roles` and the composition picks the right Zitadel mechanism:
+
+- **Same-Org** (`userOrgId == projectOrgId`): composes one `user.zitadel.m.crossplane.io/Grant` MR (the user's role assignment within the project).
+- **Cross-Org** (`userOrgId != projectOrgId`): composes a `project.zitadel.m.crossplane.io/Grant` (cross-Org Project Grant authorizing the role set for the user's home Org) plus a `user.zitadel.m.crossplane.io/Grant` with `projectGrantId` set (the user's role assignment, pulling roles from the granted set). Multi-iter: user/Grant emits once project/Grant is observed.
+
+See `examples/grants/{same-org,cross-org}.yaml`.
 
 ## Cross-Stack Integration
 
