@@ -1,0 +1,30 @@
+# code: language=yaml
+#
+# Output XR status.
+#
+
+{{- $xr := getCompositeResource . }}
+
+---
+apiVersion: {{ $xr.apiVersion }}
+kind: {{ $xr.kind }}
+status:
+  ready: {{ $state.status.ready }}
+  userId: {{ $state.status.userId | default "" | quote }}
+  loginName: {{ $state.status.loginName | default "" | quote }}
+  {{- if $state.pat.enabled }}
+  pat:
+    enabled: true
+    tokenId: {{ $state.status.patTokenId | default "" | quote }}
+    controlPlaneSecretRef:
+      name: {{ $state.pat.secretName | quote }}
+      namespace: {{ $state.namespace | quote }}
+    {{- if $state.pat.pushToAwsSm }}
+    awsSm:
+      secretArn: {{ $state.status.awsSmArn | default "" | quote }}
+      secretName: {{ $state.pat.awsSm.path | quote }}
+    {{- end }}
+  {{- else }}
+  pat:
+    enabled: false
+  {{- end }}

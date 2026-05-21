@@ -1,0 +1,74 @@
+# code: language=yaml
+#
+# Extract observed state from composed MRs for status emission + multi-iter
+# composition gating (PAT MR needs userId observed; AWS SM resources need PAT
+# observed).
+#
+
+{{- $observed := $.observed.resources | default dict }}
+
+# MachineUser observed state
+{{- $muEntry := get $observed "machineuser" | default dict }}
+{{- $muResource := $muEntry.resource | default dict }}
+{{- $muAtProvider := (($muResource.status | default dict).atProvider | default dict) }}
+{{- $userId := $muAtProvider.id | default "" }}
+{{- if and (eq $userId "") (ne $state.machineUserId "") }}
+  {{- $userId = $state.machineUserId }}
+{{- end }}
+{{- $loginName := $muAtProvider.loginName | default "" }}
+
+# MachineUser Ready
+{{- $muConditions := (($muResource.status | default dict).conditions | default list) }}
+{{- $muReady := false }}
+{{- range $muConditions }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}
+    {{- $muReady = true }}
+  {{- end }}
+{{- end }}
+
+# PAT observed state
+{{- $patTokenId := "" }}
+{{- $patReady := true }}
+{{- if $state.pat.enabled }}
+  {{- $patReady = false }}
+  {{- $patEntry := get $observed "pat" | default dict }}
+  {{- $patResource := $patEntry.resource | default dict }}
+  {{- $patAtProvider := (($patResource.status | default dict).atProvider | default dict) }}
+  {{- $patTokenId = $patAtProvider.id | default "" }}
+  {{- $patConditions := (($patResource.status | default dict).conditions | default list) }}
+  {{- range $patConditions }}
+    {{- if and (eq .type "Ready") (eq .status "True") }}
+      {{- $patReady = true }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# AWS SM + PushSecret observed state
+{{- $awsSmArn := "" }}
+{{- $awsSmReady := true }}
+{{- if and $state.pat.enabled $state.pat.pushToAwsSm }}
+  {{- $awsSmReady = false }}
+  {{- $smEntry := get $observed "aws-sm-secret" | default dict }}
+  {{- $smResource := $smEntry.resource | default dict }}
+  {{- $smAtProvider := (($smResource.status | default dict).atProvider | default dict) }}
+  {{- $awsSmArn = $smAtProvider.arn | default "" }}
+  {{- $smConditions := (($smResource.status | default dict).conditions | default list) }}
+  {{- range $smConditions }}
+    {{- if and (eq .type "Ready") (eq .status "True") }}
+      {{- $awsSmReady = true }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+# Aggregate
+{{- $ready := and $muReady $patReady $awsSmReady }}
+
+{{- $_ := set $state.observed "userId" $userId }}
+{{- $_ := set $state.observed "loginName" $loginName }}
+{{- $_ := set $state.observed "patTokenId" $patTokenId }}
+{{- $_ := set $state.observed "awsSmArn" $awsSmArn }}
+{{- $_ := set $state.status "ready" $ready }}
+{{- $_ := set $state.status "userId" $userId }}
+{{- $_ := set $state.status "loginName" $loginName }}
+{{- $_ := set $state.status "patTokenId" $patTokenId }}
+{{- $_ := set $state.status "awsSmArn" $awsSmArn }}

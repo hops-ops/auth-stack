@@ -33,7 +33,10 @@ jobs:
         [
           { "example": "examples/authstacks/minimal.yaml",      "api_path": "apis/authstacks" },
           { "example": "examples/authstacks/standard.yaml",     "api_path": "apis/authstacks" },
-          { "example": "examples/authstacks/local-colima.yaml", "api_path": "apis/authstacks" }
+          { "example": "examples/authstacks/local-colima.yaml", "api_path": "apis/authstacks" },
+          { "example": "examples/machineusers/minimal.yaml",      "api_path": "apis/machineusers" },
+          { "example": "examples/machineusers/with-pat.yaml",     "api_path": "apis/machineusers" },
+          { "example": "examples/machineusers/with-pat-push.yaml","api_path": "apis/machineusers" }
         ]
       error_on_missing_schemas: true
 

@@ -82,18 +82,26 @@ status:
 
 ## Auth-group primitives
 
-Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `HumanUser`, `MachineUser`, `Grant`, `IDP` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
+Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `MachineUser`, `Grant` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
 
 Status:
 
 | Kind | Plural | Composes | Status |
 |---|---|---|---|
-| `HumanUser` | `humanusers` | `HumanUser` + optional `UserIDPLink` MRs | TO WRITE |
-| `MachineUser` | `machineusers` | `MachineUser` + `PAT` + AWS SM push pipeline | TO WRITE |
+| `MachineUser` | `machineusers` | `MachineUser` + opt-in `AccessToken` + opt-in AWS SM `Secret` + ESO `PushSecret` (provider-kubernetes Object) | ✓ |
 | `Grant` | `grants` | `ProjectMember` (same-Org) or `ProjectGrant + GrantMember` (cross-Org) | TO WRITE |
-| `IDP` | `idps` | polymorphic over `GoogleIDP` / `GitHubIDP` / `OIDCIDP` / `SAMLIDP` | TO WRITE |
 
-Operators apply raw Zitadel `Org` / `Project` / `Role` MRs (`org.zitadel.m.crossplane.io`, `project.zitadel.m.crossplane.io`) directly when they need them — the `Tenant` business kind in [[tenant-stack]] composes the initial set during Tenant scaffolding.
+Single-resource wrappers we deliberately didn't make: `HumanUser`, `IDP`, `OrganizationSsoConfig` (and the previously-attempted `Organization`, `Project`). Operators apply raw Zitadel / OpenPanel MRs directly for those.
+
+### `MachineUser`
+
+Declarative Zitadel machine identity for CI runners, Crossplane providers, cross-cluster syncs — anything that needs a long-lived credential to call a SaaS API.
+
+The XRD's value-add is bundling. The `MachineUser` MR alone is one Zitadel resource. With `spec.pat.enabled: true` it adds an `AccessToken` MR (the PAT). With `spec.pat.pushToAwsSm: true` it adds an AWS Secrets Manager `Secret` MR + an ESO `PushSecret` Kubernetes Object — pushing the control-plane connection secret's `access_token` into AWS SM at the canonical path `push/<cluster>/<tenant>/<name>` per [[reference_aws_sm_push_tag_convention]]. Four resources, one declarative flag.
+
+PAT generation is **opt-in by default** — `pat.enabled: false` means no long-lived token is minted. Adoption of an existing Zitadel machine user uses `spec.machineUserId` (propagates as `crossplane.io/external-name` on the underlying MR).
+
+See `examples/machineusers/{minimal,with-pat,with-pat-push}.yaml`.
 
 ## Cross-Stack Integration
 

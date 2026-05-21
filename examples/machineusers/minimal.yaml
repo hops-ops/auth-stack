@@ -1,0 +1,17 @@
+# Minimal MachineUser — composes the Zitadel MachineUser MR only.
+# No PAT, no AWS SM push. Useful for service accounts that authenticate
+# via JWT key (Zitadel's other mechanism) or for declarative tracking of
+# external machine identities without minting credentials via Crossplane.
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: MachineUser
+metadata:
+  name: zitadel-provider
+  namespace: default
+spec:
+  orgId: "373268222482392664"
+  displayName: "zitadel-provider"
+  description: "provider-upjet-zitadel reconciler (post-bootstrap)"
+  accessTokenType: ACCESS_TOKEN_TYPE_JWT
+  providerConfigRef:
+    name: zitadel-tenant-stack
+    kind: ProviderConfig
