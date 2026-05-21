@@ -1,0 +1,16 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: grants.auth.hops.ops.com.ai
+spec:
+  compositeTypeRef:
+    apiVersion: auth.hops.ops.com.ai/v1alpha1
+    kind: Grant
+  mode: Pipeline
+  pipeline:
+  - functionRef:
+      name: hops-ops-auth-stackgrant
+    step: grant
+  - functionRef:
+      name: crossplane-contrib-function-auto-ready
+    step: crossplane-contrib-function-auto-ready

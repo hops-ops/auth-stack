@@ -1,0 +1,13 @@
+---
+apiVersion: project.zitadel.m.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pat-platform-admin-project-grant
+  annotations:
+    crossplane.io/composition-resource-name: project-grant
+status:
+  atProvider:
+    id: "cross-org-grant-uuid-xyz"
+  conditions:
+    - type: Ready
+      status: "True"

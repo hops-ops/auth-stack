@@ -1,0 +1,40 @@
+# code: language=yaml
+#
+# User Grant — composed for both same-Org and cross-Org modes.
+#
+# - same-Org: emits unconditionally with projectGrantId omitted.
+# - cross-Org: gated on observed project/Grant id; sets projectGrantId
+#   so the user/Grant pulls roles from the cross-Org Project Grant
+#   authorized in step 100.
+#
+
+{{- $shouldEmit := true }}
+{{- if eq $state.mode "cross-org" }}
+  {{- if eq $state.observed.projectGrantId "" }}
+    {{- $shouldEmit = false }}
+  {{- end }}
+{{- end }}
+
+{{- if $shouldEmit }}
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: {{ printf "%s-user-grant" $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "user-grant" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  forProvider:
+    orgId: {{ $state.userOrgId | quote }}
+    projectId: {{ $state.projectId | quote }}
+    userId: {{ $state.userId | quote }}
+    {{- if eq $state.mode "cross-org" }}
+    projectGrantId: {{ $state.observed.projectGrantId | quote }}
+    {{- end }}
+    roleKeys: {{ $state.roles | toJson }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  providerConfigRef:
+    name: {{ $state.providerConfigName | quote }}
+    kind: {{ $state.providerConfigKind | quote }}
+{{- end }}

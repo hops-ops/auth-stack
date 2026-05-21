@@ -1,0 +1,122 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: grants.auth.hops.ops.com.ai
+spec:
+  group: auth.hops.ops.com.ai
+  names:
+    kind: Grant
+    plural: grants
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    referenceable: true
+    served: true
+    schema:
+      openAPIV3Schema:
+        description: |
+          Grant is the first-class membership relationship that ties a
+          Zitadel User to a Project + Roles. Polymorphic over same-Org
+          and cross-Org grants:
+
+          - same-Org (`spec.userOrgId == spec.projectOrgId`): composes
+            ONE `user.zitadel.m.crossplane.io/Grant` MR (the user's role
+            assignment within the project).
+
+          - cross-Org (`spec.userOrgId != spec.projectOrgId`): composes
+            TWO MRs — a `project.zitadel.m.crossplane.io/Grant` (the
+            cross-Org Project Grant authorizing roles for the user's
+            home Org) plus a `user.zitadel.m.crossplane.io/Grant` (the
+            user's role assignment, with `projectGrantId` pointing at
+            the Project Grant). Multi-iter: user/Grant emits once
+            project/Grant is observed.
+
+          Caller writes `userId + userOrgId + projectId + projectOrgId
+          + roles` and the composition picks the right Zitadel
+          mechanism. See [[specs/grant-xrd]] for the design.
+        type: object
+        properties:
+          spec:
+            description: GrantSpec defines the desired state.
+            type: object
+            properties:
+              userId:
+                description: |
+                  Zitadel user UUID. Operator copies from the upstream
+                  MachineUser / HumanUser MR's status.atProvider.id (or
+                  Zitadel UI).
+                type: string
+              userOrgId:
+                description: |
+                  The user's home Org UUID. For same-Org grants, equal
+                  to projectOrgId.
+                type: string
+              projectId:
+                description: |
+                  Target Zitadel Project UUID.
+                type: string
+              projectOrgId:
+                description: |
+                  The Org UUID where the target Project lives.
+                type: string
+              roles:
+                description: |
+                  Role keys assigned to the user within the Project.
+                  Each must match a Role defined on the target Project.
+                type: array
+                items:
+                  type: string
+                minItems: 1
+              providerConfigRef:
+                description: ProviderConfig for provider-upjet-zitadel.
+                type: object
+                properties:
+                  name:
+                    type: string
+                  kind:
+                    type: string
+                    default: "ProviderConfig"
+              managementPolicies:
+                description: |
+                  Crossplane managementPolicies for all composed resources.
+                  Defaults to ["*"].
+                type: array
+                items:
+                  type: string
+                default: ["*"]
+              labels:
+                description: |
+                  Custom labels merged with stack defaults; applied to
+                  every composed resource.
+                type: object
+                additionalProperties:
+                  type: string
+                x-kubernetes-preserve-unknown-fields: true
+            required:
+            - userId
+            - userOrgId
+            - projectId
+            - projectOrgId
+            - roles
+            - providerConfigRef
+
+          status:
+            type: object
+            properties:
+              mode:
+                description: |
+                  Composition mode discriminator — "same-org" or
+                  "cross-org", computed from userOrgId vs projectOrgId.
+                type: string
+              userGrantId:
+                description: Underlying user/Grant MR's Zitadel UUID.
+                type: string
+              projectGrantId:
+                description: |
+                  Underlying project/Grant MR's Zitadel UUID. Only set
+                  for cross-org mode.
+                type: string
+              ready:
+                type: boolean
+        required:
+        - spec

@@ -1,0 +1,52 @@
+# code: language=yaml
+#
+# Initialize $state. Mode discriminator computed from userOrgId vs projectOrgId.
+#
+
+{{- $xr := getCompositeResource . }}
+{{- $spec := $xr.spec | default dict }}
+{{- $metadata := $xr.metadata | default dict }}
+
+{{- $name := $metadata.name }}
+{{- $namespace := $metadata.namespace | default "default" }}
+
+{{- $userId := $spec.userId }}
+{{- $userOrgId := $spec.userOrgId }}
+{{- $projectId := $spec.projectId }}
+{{- $projectOrgId := $spec.projectOrgId }}
+{{- $roles := $spec.roles }}
+
+# Mode: same-org vs cross-org
+{{- $mode := "cross-org" }}
+{{- if eq $userOrgId $projectOrgId }}
+  {{- $mode = "same-org" }}
+{{- end }}
+
+{{- $managementPolicies := $spec.managementPolicies | default (list "*") }}
+
+{{- $pcSpec := $spec.providerConfigRef }}
+{{- $pcName := $pcSpec.name }}
+{{- $pcKind := $pcSpec.kind | default "ProviderConfig" }}
+
+{{- $defaultLabels := dict
+  "hops.ops.com.ai/managed" "true"
+  "hops.ops.com.ai/auth-grant" $name
+}}
+{{- $labels := merge $defaultLabels ($spec.labels | default dict) }}
+
+{{- $state := dict
+  "name" $name
+  "namespace" $namespace
+  "mode" $mode
+  "userId" $userId
+  "userOrgId" $userOrgId
+  "projectId" $projectId
+  "projectOrgId" $projectOrgId
+  "roles" $roles
+  "managementPolicies" $managementPolicies
+  "labels" $labels
+  "providerConfigName" $pcName
+  "providerConfigKind" $pcKind
+  "observed" (dict)
+  "status" (dict)
+}}
