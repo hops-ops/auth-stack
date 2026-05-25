@@ -37,7 +37,17 @@ _items = [
                     apiVersion = "helm.m.crossplane.io/v1beta1"
                     kind = "Release"
                     metadata.name = "mk-secret-zitadel"
-                    spec.forProvider.values.zitadel.masterkeySecretName = "zitadel-masterkey"
+                    spec.forProvider.values = {
+                        zitadel.masterkeySecretName = "zitadel-masterkey"
+                        resources = {
+                            requests = {cpu = "23m", memory = "156Mi"}
+                            limits = {cpu = "200m", memory = "384Mi"}
+                        }
+                        login.resources = {
+                            requests = {cpu = "15m", memory = "105Mi"}
+                            limits = {cpu = "500m", memory = "512Mi"}
+                        }
+                    }
                 }
             ]
         }
