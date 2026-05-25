@@ -160,6 +160,18 @@
   "configmapConfig" $cmCfg
 }}
 
+# Default app resources come from live Goldilocks recommendations. The chart
+# uses top-level `resources` for the main ZITADEL Deployment and
+# `login.resources` for the Login UI Deployment.
+{{- $zitadelResources := dict
+  "requests" (dict "cpu" "23m" "memory" "156Mi")
+  "limits" (dict "cpu" "200m" "memory" "384Mi")
+}}
+{{- $loginResources := dict
+  "requests" (dict "cpu" "15m" "memory" "105Mi")
+  "limits" (dict "cpu" "500m" "memory" "512Mi")
+}}
+
 # Masterkey wiring — secretRef sets masterkeySecretName, inline sets masterkey directly.
 {{- if eq $mk.mode "secretRef" }}
   {{- $zitadel = set $zitadel "masterkeySecretName" $mk.secretName }}
@@ -173,6 +185,8 @@
 # the main Deployment.
 {{- $chartDefaults := dict
   "zitadel" $zitadel
+  "resources" $zitadelResources
+  "login" (dict "resources" $loginResources)
   "env" $dbEnv
 }}
 
