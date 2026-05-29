@@ -415,6 +415,52 @@ spec:
                         type: string
                       sectionName:
                         type: string
+              smtp:
+                description: |
+                  Configure Zitadel's SMTP provider from a platform SMTPSender
+                  (aws-smtp-sender). When enabled, AuthStack observes the referenced
+                  SMTPSender XR for host/port/username, pulls the SES SMTP password
+                  from AWS Secrets Manager via ESO, and composes a
+                  smtp.zitadel.m.crossplane.io Config MR driving Zitadel's live
+                  management API. See [[specs/smtpsender-consumer-pattern]].
+                type: object
+                properties:
+                  enabled:
+                    description: Compose the Zitadel SMTP wiring. Defaults to false.
+                    type: boolean
+                  smtpSenderRef:
+                    description: The SMTPSender XR (on the control plane) to read host/port/username/awsSecretsManagerPath from.
+                    type: object
+                    properties:
+                      name:
+                        description: SMTPSender metadata.name. Required when enabled.
+                        type: string
+                      namespace:
+                        description: SMTPSender namespace. Defaults to this AuthStack XR's own namespace.
+                        type: string
+                  fromAddress:
+                    description: From address for Zitadel mail. MUST be on the SMTPSender's verified SES domain. Required when enabled.
+                    type: string
+                  fromName:
+                    description: Display name for the From address. Defaults to the domain.
+                    type: string
+                  replyToAddress:
+                    description: Optional Reply-To address.
+                    type: string
+                  tls:
+                    description: Use STARTTLS (SES SMTP on port 587). Defaults to true.
+                    type: boolean
+                    default: true
+                  setActive:
+                    description: Mark this SMTP config active in Zitadel. Defaults to true.
+                    type: boolean
+                    default: true
+                  secretStoreName:
+                    description: ClusterSecretStore to pull the SMTP password from. Defaults to "hops-aws-secrets-manager".
+                    type: string
+                  smtpSecretName:
+                    description: Name of the K8s Secret ESO materializes for the SMTP password. Defaults to "zitadel-smtp".
+                    type: string
               chartValues:
                 description: Escape hatch — Helm values merged on top of stack-rendered values. Prefer typed top-level fields when a knob proves load-bearing.
                 type: object
@@ -494,5 +540,27 @@ spec:
                         type: string
                       key:
                         type: string
+              smtp:
+                description: SMTP wiring status, populated when spec.smtp.enabled and the SMTPSender is observed.
+                type: object
+                properties:
+                  sourceSmtpSender:
+                    description: The observed SMTPSender (namespace/name).
+                    type: string
+                  host:
+                    type: string
+                  port:
+                    type: integer
+                  username:
+                    type: string
+                  awsSecretsManagerPath:
+                    description: AWS SM path holding the SES SMTP password.
+                    type: string
+                  dkimVerified:
+                    description: Whether the observed SMTPSender reports DKIM verified.
+                    type: boolean
+                  ready:
+                    description: Whether the SMTP Config MR is composed (the referenced SMTPSender has been observed with a published SMTP secret path).
+                    type: boolean
         required:
         - spec

@@ -1,5 +1,10 @@
 import models.io.upbound.dev.meta.v1alpha1 as metav1alpha1
 
+_ready_conditions = [
+    {type = "Ready", status = "True"}
+    {type = "Synced", status = "True"}
+]
+
 # ==============================================================================
 # Unit tests for AuthStack XRD
 #
@@ -671,6 +676,201 @@ _items = [
                             Pat.ExpirationDate = "2029-01-01T00:00:00Z"
                         }
                     }
+                }
+            ]
+        }
+    }
+
+    # ==========================================================================
+    # Test 14: spec.smtp wires the SMTPSender consumer chain
+    #
+    # Given an observed SMTPSender (host/port/username + DKIM verified) and a
+    # Ready Zitadel release, spec.smtp.enabled composes the SES password
+    # ExternalSecret (whole-secret pull, NO property), the iam-admin PAT ->
+    # credentials ExternalSecret (push auto-enabled), the zitadel SMTP
+    # ProviderConfig, and the zitadel SMTP Config MR (host:port from observed).
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "smtp-wires-smtpsender-consumer-chain"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "hops.ops.com.ai/v1alpha1"
+                kind = "AuthStack"
+                metadata.name = "smtp-auth"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    firstInstance = {
+                        org = "hops-ops"
+                        iamAdmin.username = "platform-admin"
+                        masterkey.secretRef.name = "zitadel-masterkey"
+                    }
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                    smtp = {
+                        enabled = True
+                        smtpSenderRef.name = "ops"
+                        fromAddress = "no-reply@auth.example.com"
+                        fromName = "Hops Ops"
+                        replyToAddress = "support@auth.example.com"
+                    }
+                }
+            }
+            observedResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-auth-observed-smtp-sender"
+                    metadata.annotations = {
+                        "crossplane.io/composition-resource-name" = "observed-smtp-sender"
+                    }
+                    status.atProvider.manifest = {
+                        apiVersion = "aws.hops.ops.com.ai/v1alpha1"
+                        kind = "SMTPSender"
+                        metadata.name = "ops"
+                        status = {
+                            smtp = {
+                                host = "email-smtp.us-east-2.amazonaws.com"
+                                port = 587
+                                username = "AKIAIOSFODNN7EXAMPLE"
+                                awsSecretsManagerPath = "push/test-cluster/ops-smtp"
+                            }
+                            dkim.verified = True
+                        }
+                    }
+                }
+                {
+                    apiVersion = "helm.m.crossplane.io/v1beta1"
+                    kind = "Release"
+                    metadata.name = "smtp-auth-zitadel"
+                    metadata.annotations = {
+                        "crossplane.io/composition-resource-name" = "helm-release-zitadel"
+                    }
+                    status.conditions = _ready_conditions
+                }
+            ]
+            assertResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-auth-external-secret-smtp-password"
+                    spec.forProvider.manifest = {
+                        apiVersion = "external-secrets.io/v1"
+                        kind = "ExternalSecret"
+                        metadata.name = "zitadel-smtp"
+                        # Whole-secret pull: remoteRef has key but NO property.
+                        spec.data = [{
+                            secretKey = "smtp-password"
+                            remoteRef.key = "push/test-cluster/ops-smtp"
+                        }]
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-auth-zitadel-smtp-credentials"
+                    spec.forProvider.manifest = {
+                        apiVersion = "external-secrets.io/v1"
+                        kind = "ExternalSecret"
+                        metadata.name = "zitadel-smtp-credentials"
+                        spec.data = [{
+                            secretKey = "access_token"
+                            remoteRef = {key = "push/test-cluster/zitadel-credentials", property = "access_token"}
+                        }]
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-auth-zitadel-smtp-providerconfig"
+                    spec.forProvider.manifest = {
+                        apiVersion = "zitadel.m.crossplane.io/v1beta1"
+                        kind = "ProviderConfig"
+                        metadata.name = "smtp-auth-smtp"
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-auth-zitadel-smtp-config"
+                    spec.forProvider.manifest = {
+                        apiVersion = "smtp.zitadel.m.crossplane.io/v1alpha1"
+                        kind = "Config"
+                        spec.forProvider = {
+                            host = "email-smtp.us-east-2.amazonaws.com:587"
+                            user = "AKIAIOSFODNN7EXAMPLE"
+                            senderAddress = "no-reply@auth.example.com"
+                            senderName = "Hops Ops"
+                            replyToAddress = "support@auth.example.com"
+                        }
+                    }
+                }
+            ]
+        }
+    }
+
+    # ==========================================================================
+    # Test 15: SMTP durable resources render on intent alone (no observed yet)
+    #
+    # The password ES, credentials ES, and ProviderConfig gate on stable user
+    # intent (smtp.enabled + smtpSenderRef.name), NOT on observed state, so they
+    # render even before the SMTPSender is observed and therefore cannot vanish
+    # on a transient Observe miss (destructive-omit guard). The Config MR (180)
+    # gates on $smtp.render and so stays absent until the secret path is observed
+    # (proven present in Test 14).
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "smtp-durable-resources-render-without-observed"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "hops.ops.com.ai/v1alpha1"
+                kind = "AuthStack"
+                metadata.name = "smtp-noobs"
+                spec = {
+                    clusterName = "test-cluster"
+                    domain = "auth.example.com"
+                    firstInstance = {
+                        org = "hops-ops"
+                        iamAdmin.username = "platform-admin"
+                        masterkey.secretRef.name = "zitadel-masterkey"
+                    }
+                    database.external.dsnSecretRef = {
+                        name = "zitadel-db"
+                        key = "dsn"
+                    }
+                    smtp = {
+                        enabled = True
+                        smtpSenderRef.name = "ops"
+                        fromAddress = "no-reply@auth.example.com"
+                    }
+                }
+            }
+            # Deliberately NO observedResources: the SMTPSender is not yet observed.
+            assertResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-noobs-external-secret-smtp-password"
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-noobs-zitadel-smtp-credentials"
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "smtp-noobs-zitadel-smtp-providerconfig"
                 }
             ]
         }

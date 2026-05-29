@@ -1,0 +1,33 @@
+# code: language=yaml
+#
+# Observe the platform SMTPSender XR to read its status.smtp.{host,port,username,
+# awsSecretsManagerPath} and status.dkim.verified (see specs/smtpsender-consumer-pattern).
+#
+# The SMTPSender lives on the colima CONTROL PLANE, NOT the workload cluster — so this
+# Object MUST use the in-cluster `default` kubernetes ProviderConfig (InjectedIdentity),
+# NOT kubernetesProviderConfigRef (which targets EKS). managementPolicies: [Observe]
+# means we only read the SMTPSender, never create/modify it.
+#
+{{- $smtp := $state.smtp }}
+{{- if and $smtp.enabled $smtp.smtpSenderRef.name }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-observed-smtp-sender
+  annotations:
+    {{ setResourceNameAnnotation "observed-smtp-sender" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: ["Observe"]
+  forProvider:
+    manifest:
+      apiVersion: aws.hops.ops.com.ai/v1alpha1
+      kind: SMTPSender
+      metadata:
+        name: {{ $smtp.smtpSenderRef.name }}
+        namespace: {{ $smtp.smtpSenderRef.namespace }}
+  providerConfigRef:
+    name: default
+    kind: ProviderConfig
+{{- end }}

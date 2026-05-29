@@ -1,0 +1,65 @@
+# code: language=yaml
+#
+# Zitadel SMTP Config MR — configures the running Zitadel instance's SMTP
+# provider via the management API (smtp.zitadel.m.crossplane.io/v1alpha1 Config),
+# authenticating through the SMTP ProviderConfig (175). host/user come from the
+# observed SMTPSender status (literals); the password comes from the
+# ExternalSecret-synthesized Secret (160). Wrapped in a provider-kubernetes
+# Object on the workload cluster, mirroring the email-marketing Oidc MR (420).
+#
+# Gated ONLY on $smtp.render (= smtp.enabled + smtpSenderRef + a non-empty
+# observed awsSecretsManagerPath). This is an existence-gate on the observed
+# host/user/password (plain-string deps the Config MR cannot fabricate) — the one
+# sanctioned use of a render gate. We deliberately do NOT gate on the Zitadel
+# release's Ready condition (a .ready gate would DELETE this Config MR on every
+# chart upgrade, wiping the live SMTP config — see
+# reference_gotmpl_conditional_omit_deletes) nor on dkimVerified (DKIM signing
+# follows the published DNS records, not SES's verification-status reporting,
+# which can flip). upjet retries the apply if Zitadel is momentarily unreachable.
+#
+{{- $smtp := $state.smtp }}
+{{- if $smtp.render }}
+{{- $o := $smtp.observed }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-zitadel-smtp-config
+  annotations:
+    {{ setResourceNameAnnotation "zitadel-smtp-config" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: smtp.zitadel.m.crossplane.io/v1alpha1
+      kind: Config
+      metadata:
+        name: {{ $state.name }}-smtp
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        managementPolicies: {{ $state.managementPolicies | toJson }}
+        forProvider:
+          host: {{ printf "%s:%d" $o.host (int $o.port) | quote }}
+          user: {{ $o.username | quote }}
+          # passwordSecretRef is {name,key} only (no namespace in the CRD schema);
+          # the provider reads it from the Config MR's own namespace, where 160
+          # synthesizes the Secret.
+          passwordSecretRef:
+            name: {{ $smtp.secretName }}
+            key: smtp-password
+          senderAddress: {{ $smtp.fromAddress | quote }}
+          senderName: {{ $smtp.fromName | quote }}
+          {{- if $smtp.replyToAddress }}
+          replyToAddress: {{ $smtp.replyToAddress | quote }}
+          {{- end }}
+          tls: {{ $smtp.tls }}
+          setActive: {{ $smtp.setActive }}
+        providerConfigRef:
+          name: {{ $state.name }}-smtp
+          kind: ProviderConfig
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+{{- end }}

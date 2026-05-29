@@ -1,0 +1,43 @@
+# AuthStack consuming a platform SMTPSender to drive Zitadel's outbound email.
+#
+# spec.smtp.enabled wires the whole consumer chain declaratively:
+#   - Observes the referenced SMTPSender for host/port/username + DKIM status
+#   - Pulls the SES SMTP password from AWS Secrets Manager via ESO
+#   - Publishes this stack's iam-admin PAT (auto-enabled) and assembles a
+#     zitadel ProviderConfig from it
+#   - Drives the running Zitadel's SMTP provider via a Config MR
+#
+# The operator only expresses intent — no helm values, no secret plumbing.
+apiVersion: hops.ops.com.ai/v1alpha1
+kind: AuthStack
+metadata:
+  name: auth
+  namespace: example-env
+spec:
+  clusterName: example-cluster
+  domain: auth.example.com
+  externalSecure: true
+  firstInstance:
+    org: hops-ops
+    iamAdmin:
+      username: platform-admin
+    masterkey:
+      secretRef:
+        name: zitadel-masterkey
+  database:
+    external:
+      dsnSecretRef:
+        name: zitadel-db
+        key: dsn
+  gateway:
+    enabled: true
+    parentRef:
+      name: platform-gateway
+      namespace: istio-system
+  smtp:
+    enabled: true
+    smtpSenderRef:
+      name: ops
+    fromAddress: no-reply@auth.example.com
+    fromName: Hops Ops
+    replyToAddress: support@auth.example.com
