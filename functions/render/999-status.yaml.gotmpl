@@ -33,3 +33,13 @@ status:
       namespace: {{ $s.bootstrap.loginClientPatSecretRef.namespace }}
       key: {{ $s.bootstrap.loginClientPatSecretRef.key }}
   {{- end }}
+  {{- if $state.smtp.enabled }}
+  smtp:
+    sourceSmtpSender: {{ $s.smtp.sourceSmtpSender | quote }}
+    host: {{ $s.smtp.host | quote }}
+    port: {{ $s.smtp.port }}
+    username: {{ $s.smtp.username | quote }}
+    awsSecretsManagerPath: {{ $s.smtp.awsSecretsManagerPath | quote }}
+    dkimVerified: {{ $s.smtp.dkimVerified }}
+    ready: {{ $s.smtp.ready }}
+  {{- end }}

@@ -1,0 +1,40 @@
+# code: language=yaml
+#
+# Zitadel ProviderConfig (install namespace) for the SMTP Config MR, sourcing the
+# credentials assembled in 170. Mirrors email-marketing 410. Same-namespace as
+# the Config MR (175 + 180 both live in $state.namespace on the workload cluster).
+#
+{{- $smtp := $state.smtp }}
+{{- /* Stable-intent gate (not $smtp.render): the PC must be durable so the
+   Config MR (180) always has auth; deleting it on a transient Observe miss
+   would strand the Config MR. Mirrors email-marketing 410. */ -}}
+{{- if and $smtp.enabled $smtp.smtpSenderRef.name }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-zitadel-smtp-providerconfig
+  annotations:
+    {{ setResourceNameAnnotation "zitadel-smtp-providerconfig" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: zitadel.m.crossplane.io/v1beta1
+      kind: ProviderConfig
+      metadata:
+        name: {{ $state.name }}-smtp
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        credentials:
+          source: Secret
+          secretRef:
+            name: zitadel-smtp-credentials
+            namespace: {{ $state.namespace }}
+            key: credentials
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+{{- end }}

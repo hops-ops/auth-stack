@@ -31,6 +31,48 @@
 ) }}
 
 # ==============================================================================
+# Observed SMTPSender (when spec.smtp.enabled). Read status.smtp.* + dkim from the
+# Observe Object's atProvider.manifest. Gate all SMTP render on the observed
+# awsSecretsManagerPath (composition-gate). Validate required fields early.
+# ==============================================================================
+{{- $smtp := $state.smtp }}
+{{- if $smtp.enabled }}
+  {{- if not $smtp.smtpSenderRef.name }}{{- fail "spec.smtp.enabled requires spec.smtp.smtpSenderRef.name" }}{{- end }}
+  {{- if not $smtp.fromAddress }}{{- fail "spec.smtp.enabled requires spec.smtp.fromAddress (must be on the SMTPSender's verified SES domain)" }}{{- end }}
+{{- end }}
+{{- $ssEntry := get $observed "observed-smtp-sender" | default dict }}
+{{- $ssManifest := dig "resource" "status" "atProvider" "manifest" dict $ssEntry }}
+{{- $ssStatus := $ssManifest.status | default dict }}
+{{- $ssSmtp := $ssStatus.smtp | default dict }}
+{{- $ssDkim := $ssStatus.dkim | default dict }}
+# Once the SMTPSender is observed, enforce the XRD contract that fromAddress is on
+# its verified SES domain (or a subdomain) — otherwise SES silently rejects mail
+# and the only signal is in Zitadel's logs. Skipped until the domain is observed,
+# so it never blocks first-cycle bootstrap.
+{{- if $smtp.enabled }}
+  {{- $ssDomain := dig "spec" "domain" "" $ssManifest }}
+  {{- $atParts := splitList "@" $smtp.fromAddress }}
+  {{- if and $ssDomain (eq (len $atParts) 2) }}
+    {{- $fromDomain := last $atParts }}
+    {{- if not (or (eq $fromDomain $ssDomain) (hasSuffix (printf ".%s" $ssDomain) $fromDomain)) }}
+      {{- fail (printf "spec.smtp.fromAddress (%s) must be on the SMTPSender's verified SES domain %q (or a subdomain of it)" $smtp.fromAddress $ssDomain) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- $smtpObserved := dict
+  "host" ($ssSmtp.host | default "")
+  "port" ($ssSmtp.port | default 587)
+  "username" ($ssSmtp.username | default "")
+  "awsSecretsManagerPath" ($ssSmtp.awsSecretsManagerPath | default "")
+  "dkimVerified" ($ssDkim.verified | default false)
+}}
+{{- $smtpRender := and $smtp.enabled $smtp.smtpSenderRef.name (ne $smtpObserved.awsSecretsManagerPath "") }}
+# mergeOverwrite (not merge): 000 pre-seeds smtp.observed={}/render=false, and
+# plain `merge` gives precedence to the DEST, so the seeded zero-values would win
+# and the real observed values would never propagate. Source must win here.
+{{- $state = set $state "smtp" (mergeOverwrite $state.smtp (dict "observed" $smtpObserved "render" $smtpRender)) }}
+
+# ==============================================================================
 # providerConfig status surface — consumer contract.
 #
 # When pushCredentials is enabled, expose where the iam-admin PAT lives
@@ -94,4 +136,13 @@
     "discoveryURL" $discovery
   )
   "bootstrap" $bootstrap
+  "smtp" (dict
+    "sourceSmtpSender" (ternary (printf "%s/%s" $smtp.smtpSenderRef.namespace $smtp.smtpSenderRef.name) "" $smtp.enabled)
+    "host" $smtp.observed.host
+    "port" $smtp.observed.port
+    "username" $smtp.observed.username
+    "awsSecretsManagerPath" $smtp.observed.awsSecretsManagerPath
+    "dkimVerified" $smtp.observed.dkimVerified
+    "ready" $smtp.render
+  )
 ) }}

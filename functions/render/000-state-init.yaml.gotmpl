@@ -177,6 +177,33 @@
 {{- end }}
 
 # ==============================================================================
+# SMTP — consume a platform SMTPSender (see specs/smtpsender-consumer-pattern).
+# Observe the SMTPSender for host/port/username, pull the SES password from AWS
+# SM via ESO, and drive Zitadel's SMTP via a smtp.zitadel.m.crossplane.io Config.
+# ==============================================================================
+{{- $smtp := $spec.smtp | default dict }}
+{{- $smtpEnabled := false }}
+{{- if hasKey $smtp "enabled" }}
+  {{- $smtpEnabled = $smtp.enabled }}
+{{- end }}
+# SMTP self-contains: enabling it also publishes the iam-admin PAT (the SMTP
+# ProviderConfig is just another consumer of that pushed PAT), so the operator
+# only flips spec.smtp.enabled — no separate pushCredentials toggle required.
+{{- if $smtpEnabled }}{{- $pushCredsEnabled = true }}{{- end }}
+{{- $smtpSenderRef := $smtp.smtpSenderRef | default dict }}
+{{- $smtpSenderName := $smtpSenderRef.name | default "" }}
+{{- $smtpSenderNamespace := $smtpSenderRef.namespace | default ($metadata.namespace | default "default") }}
+{{- $smtpFromAddress := $smtp.fromAddress | default "" }}
+{{- $smtpFromName := $smtp.fromName | default $domain }}
+{{- $smtpReplyTo := $smtp.replyToAddress | default "" }}
+{{- $smtpTls := true }}
+{{- if hasKey $smtp "tls" }}{{- $smtpTls = $smtp.tls }}{{- end }}
+{{- $smtpSetActive := true }}
+{{- if hasKey $smtp "setActive" }}{{- $smtpSetActive = $smtp.setActive }}{{- end }}
+{{- $smtpStoreName := $smtp.secretStoreName | default "hops-aws-secrets-manager" }}
+{{- $smtpSecretName := $smtp.smtpSecretName | default "zitadel-smtp" }}
+
+# ==============================================================================
 # Initialize $state
 # ==============================================================================
 {{- $state := dict
@@ -267,6 +294,19 @@
       "namespace" ($gwParentRef.namespace | default "")
       "sectionName" ($gwParentRef.sectionName | default "")
     )
+  )
+  "smtp" (dict
+    "enabled" $smtpEnabled
+    "smtpSenderRef" (dict "name" $smtpSenderName "namespace" $smtpSenderNamespace)
+    "fromAddress" $smtpFromAddress
+    "fromName" $smtpFromName
+    "replyToAddress" $smtpReplyTo
+    "tls" $smtpTls
+    "setActive" $smtpSetActive
+    "secretStoreName" $smtpStoreName
+    "secretName" $smtpSecretName
+    "observed" (dict)
+    "render" false
   )
   "observed" (dict)
   "status" (dict)
