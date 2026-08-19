@@ -1,13 +1,67 @@
 # code: language=yaml
 #
-# Extract observed state for multi-iter gating + status emission.
+# Resolve references, then extract observed state for gating + status emission.
 #
+
+# Resolve referenced managed resources from status.atProvider. Rendered grants
+# are gated on IDs existing, not on Ready=True, so a transient readiness
+# condition does not remove an already resolvable grant.
+{{- $extra := $.extraResources | default dict }}
+
+{{- if $state.userRefName }}
+  {{- $matches := get $extra "referenced-user" | default dict }}
+  {{- $users := $matches.items | default list }}
+  {{- range $users }}
+    {{- $user := .resource | default dict }}
+    {{- if eq (($user.metadata | default dict).name | default "") $state.userRefName }}
+      {{- $status := $user.status | default dict }}
+      {{- $atProvider := $status.atProvider | default dict }}
+      {{- $_ := set $state "userId" ($atProvider.id | default "") }}
+      {{- $_ := set $state "userOrgId" ($atProvider.orgId | default "") }}
+      {{- range ($status.conditions | default list) }}
+        {{- if and (eq .type "Ready") (eq .status "True") }}
+          {{- $_ := set $state "userRefReady" true }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- if $state.projectRefName }}
+  {{- $matches := get $extra "referenced-project" | default dict }}
+  {{- $projects := $matches.items | default list }}
+  {{- range $projects }}
+    {{- $project := .resource | default dict }}
+    {{- if eq (($project.metadata | default dict).name | default "") $state.projectRefName }}
+      {{- $status := $project.status | default dict }}
+      {{- $atProvider := $status.atProvider | default dict }}
+      {{- $_ := set $state "projectId" ($atProvider.id | default "") }}
+      {{- $_ := set $state "projectOrgId" ($atProvider.orgId | default "") }}
+      {{- range ($status.conditions | default list) }}
+        {{- if and (eq .type "Ready") (eq .status "True") }}
+          {{- $_ := set $state "projectRefReady" true }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+{{- $resolved := and $state.userId $state.userOrgId $state.projectId $state.projectOrgId }}
+{{- $_ := set $state "referencesResolved" (not (empty $resolved)) }}
+
+{{- if $state.referencesResolved }}
+  {{- $mode := "cross-org" }}
+  {{- if eq $state.userOrgId $state.projectOrgId }}
+    {{- $mode = "same-org" }}
+  {{- end }}
+  {{- $_ := set $state "mode" $mode }}
+{{- end }}
 
 {{- $observed := $.observed.resources | default dict }}
 
 # Project Grant (only relevant in cross-org mode)
 {{- $projectGrantId := "" }}
-{{- $projectGrantReady := true }}
+{{- $projectGrantReady := $state.referencesResolved }}
 {{- if eq $state.mode "cross-org" }}
   {{- $projectGrantReady = false }}
   {{- $pgEntry := get $observed "project-grant" | default dict }}
@@ -39,8 +93,11 @@
 {{- $ready := and $projectGrantReady $userGrantReady }}
 
 {{- $_ := set $state.observed "projectGrantId" $projectGrantId }}
+{{- $_ := set $state.observed "projectGrantReady" $projectGrantReady }}
 {{- $_ := set $state.observed "userGrantId" $userGrantId }}
+{{- $_ := set $state.observed "userGrantReady" $userGrantReady }}
 {{- $_ := set $state.status "ready" $ready }}
 {{- $_ := set $state.status "mode" $state.mode }}
+{{- $_ := set $state.status "referencesResolved" $state.referencesResolved }}
 {{- $_ := set $state.status "projectGrantId" $projectGrantId }}
 {{- $_ := set $state.status "userGrantId" $userGrantId }}

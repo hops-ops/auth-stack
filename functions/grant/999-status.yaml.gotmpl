@@ -9,7 +9,8 @@ apiVersion: {{ $xr.apiVersion }}
 kind: {{ $xr.kind }}
 status:
   ready: {{ $state.status.ready }}
-  mode: {{ $state.status.mode | quote }}
+  mode: {{ $state.status.mode | default "pending" | quote }}
+  referencesResolved: {{ $state.status.referencesResolved }}
   userGrantId: {{ $state.status.userGrantId | default "" | quote }}
   {{- if eq $state.mode "cross-org" }}
   projectGrantId: {{ $state.status.projectGrantId | default "" | quote }}

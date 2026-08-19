@@ -1,0 +1,18 @@
+# Same-Org Grant using local managed-resource references. The Grant must share
+# a namespace with the referenced HumanUser and Project. No live Zitadel UUIDs
+# are stored in Git; the composition resolves IDs and Org IDs from status.
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: Grant
+metadata:
+  name: alice-e2e-ui-user
+  namespace: default
+spec:
+  userIdRef:
+    name: e2e-alice
+  projectIdRef:
+    name: e2e-ui
+  roles:
+    - user
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

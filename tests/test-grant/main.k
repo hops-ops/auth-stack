@@ -161,6 +161,40 @@ _items = [
             ]
         }
     },
+
+    # ==========================================================================
+    # Test 5: local references remain pending until both namespaced targets
+    # are returned by ExtraResources.
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "local-references-wait-for-targets"
+        spec = {
+            compositionPath = "apis/grants/composition.yaml"
+            xrdPath = "apis/grants/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "auth.hops.ops.com.ai/v1alpha1"
+                kind = "Grant"
+                metadata = {name = "alice-grant", namespace = "default"}
+                spec = {
+                    userIdRef = {name = "e2e-alice"}
+                    projectIdRef = {name = "e2e-ui"}
+                    roles = ["user"]
+                    providerConfigRef = {name = "default", kind = "ClusterProviderConfig"}
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "auth.hops.ops.com.ai/v1alpha1"
+                    kind = "Grant"
+                    metadata.name = "alice-grant"
+                    status.mode = "pending"
+                    status.referencesResolved = False
+                }
+            ]
+        }
+    },
 ]
 
 items = _items
