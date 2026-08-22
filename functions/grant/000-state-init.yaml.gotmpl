@@ -1,6 +1,6 @@
 # code: language=yaml
 #
-# Initialize $state. Mode discriminator computed from userOrgId vs projectOrgId.
+# Initialize $state. References are resolved in the next templates.
 #
 
 {{- $xr := getCompositeResource . }}
@@ -10,17 +10,13 @@
 {{- $name := $metadata.name }}
 {{- $namespace := $metadata.namespace | default "default" }}
 
-{{- $userId := $spec.userId }}
-{{- $userOrgId := $spec.userOrgId }}
-{{- $projectId := $spec.projectId }}
-{{- $projectOrgId := $spec.projectOrgId }}
+{{- $userId := $spec.userId | default "" }}
+{{- $userOrgId := $spec.userOrgId | default "" }}
+{{- $userIdRef := $spec.userIdRef | default dict }}
+{{- $projectId := $spec.projectId | default "" }}
+{{- $projectOrgId := $spec.projectOrgId | default "" }}
+{{- $projectIdRef := $spec.projectIdRef | default dict }}
 {{- $roles := $spec.roles }}
-
-# Mode: same-org vs cross-org
-{{- $mode := "cross-org" }}
-{{- if eq $userOrgId $projectOrgId }}
-  {{- $mode = "same-org" }}
-{{- end }}
 
 {{- $managementPolicies := $spec.managementPolicies | default (list "*") }}
 
@@ -37,11 +33,20 @@
 {{- $state := dict
   "name" $name
   "namespace" $namespace
-  "mode" $mode
+  "mode" ""
   "userId" $userId
   "userOrgId" $userOrgId
+  "userRefName" ($userIdRef.name | default "")
+  "userRefApiVersion" ($userIdRef.apiVersion | default "user.zitadel.m.crossplane.io/v1alpha1")
+  "userRefKind" ($userIdRef.kind | default "HumanUser")
+  "userRefReady" false
   "projectId" $projectId
   "projectOrgId" $projectOrgId
+  "projectRefName" ($projectIdRef.name | default "")
+  "projectRefApiVersion" ($projectIdRef.apiVersion | default "project.zitadel.m.crossplane.io/v1alpha1")
+  "projectRefKind" ($projectIdRef.kind | default "Project")
+  "projectRefReady" false
+  "referencesResolved" false
   "roles" $roles
   "managementPolicies" $managementPolicies
   "labels" $labels
@@ -50,3 +55,26 @@
   "observed" (dict)
   "status" (dict)
 }}
+
+# Ask Crossplane for local user/project managed resources referenced by name.
+# Namespaced extra resources are resolved in the Grant XR's namespace.
+{{- if or $state.userRefName $state.projectRefName }}
+---
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  {{- if $state.userRefName }}
+  referenced-user:
+    apiVersion: {{ $state.userRefApiVersion | quote }}
+    kind: {{ $state.userRefKind | quote }}
+    matchName: {{ $state.userRefName | quote }}
+    namespace: {{ $state.namespace | quote }}
+  {{- end }}
+  {{- if $state.projectRefName }}
+  referenced-project:
+    apiVersion: {{ $state.projectRefApiVersion | quote }}
+    kind: {{ $state.projectRefKind | quote }}
+    matchName: {{ $state.projectRefName | quote }}
+    namespace: {{ $state.namespace | quote }}
+  {{- end }}
+{{- end }}

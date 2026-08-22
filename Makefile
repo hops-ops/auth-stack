@@ -31,8 +31,10 @@ EXAMPLES := \
     examples/machineusers/minimal.yaml:: \
     examples/machineusers/with-pat.yaml:: \
     examples/machineusers/with-pat-push.yaml:: \
+    examples/grants/referenced-same-org.yaml:: \
     examples/grants/same-org.yaml:: \
-    examples/grants/cross-org.yaml::
+    examples/grants/cross-org.yaml:: \
+    examples/grants/cross-org.yaml::tests/test-grant/observed/cross-org-iter2.yaml
 
 # Render all examples (parallel execution, output shown per-job when complete)
 render\:all:
@@ -83,12 +85,12 @@ validate\:all:
 				echo "=== Validating $$example with observed-resources $$observed ==="; \
 				up composition render --xrd=$$definition $$composition $$example \
 					--observed-resources=$$observed --include-full-xr --quiet | \
-					crossplane beta validate $$api_dir --error-on-missing-schemas -; \
+					crossplane resource validate $$api_dir --error-on-missing-schemas -; \
 			else \
 				echo "=== Validating $$example (api=$$api_dir) ==="; \
 				up composition render --xrd=$$definition $$composition $$example \
 					--include-full-xr --quiet | \
-					crossplane beta validate $$api_dir --error-on-missing-schemas -; \
+					crossplane resource validate $$api_dir --error-on-missing-schemas -; \
 			fi; \
 			echo "" \
 		) > "$$outfile" 2>&1 & \
@@ -118,7 +120,7 @@ validate\:%:
 	@example="examples/authstacks/$*.yaml"; \
 	up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example \
 		--include-full-xr --quiet | \
-		crossplane beta validate $(XRD_DIR) --error-on-missing-schemas -
+		crossplane resource validate $(XRD_DIR) --error-on-missing-schemas -
 
 test:
 	up test run $(RENDER_TESTS)

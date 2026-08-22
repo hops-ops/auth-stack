@@ -5,12 +5,13 @@
 # (userOrgId) with the requested role set.
 #
 
-{{- if eq $state.mode "cross-org" }}
+{{- if and $state.referencesResolved (eq $state.mode "cross-org") }}
+{{- $projectGrantName := printf "%s-project-grant" $state.name }}
 ---
 apiVersion: project.zitadel.m.crossplane.io/v1alpha1
 kind: Grant
 metadata:
-  name: {{ printf "%s-project-grant" $state.name }}
+  name: {{ $projectGrantName }}
   annotations:
     {{ setResourceNameAnnotation "project-grant" }}
   labels: {{ $state.labels | toJson }}
@@ -24,4 +25,26 @@ spec:
   providerConfigRef:
     name: {{ $state.providerConfigName | quote }}
     kind: {{ $state.providerConfigKind | quote }}
+
+{{- if and $state.projectRefName $state.projectRefReady $state.observed.projectGrantReady }}
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ printf "%s-delete-project-grant-before-project" $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "usage-project-grant-project" }}
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: {{ $state.projectRefApiVersion | quote }}
+    kind: {{ $state.projectRefKind | quote }}
+    resourceRef:
+      name: {{ $state.projectRefName | quote }}
+  by:
+    apiVersion: project.zitadel.m.crossplane.io/v1alpha1
+    kind: Grant
+    resourceRef:
+      name: {{ $projectGrantName | quote }}
+{{- end }}
 {{- end }}

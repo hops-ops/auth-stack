@@ -3,11 +3,28 @@ apiVersion: project.zitadel.m.crossplane.io/v1alpha1
 kind: Grant
 metadata:
   name: pat-platform-admin-project-grant
+  namespace: default
   annotations:
     crossplane.io/composition-resource-name: project-grant
+    gotemplating.fn.crossplane.io/composition-resource-name: project-grant
 status:
   atProvider:
     id: "cross-org-grant-uuid-xyz"
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  name: pat-platform-admin-user-grant
+  namespace: default
+  annotations:
+    crossplane.io/composition-resource-name: user-grant
+    gotemplating.fn.crossplane.io/composition-resource-name: user-grant
+status:
+  atProvider:
+    id: "user-grant-uuid-xyz"
   conditions:
     - type: Ready
       status: "True"

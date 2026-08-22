@@ -31,9 +31,11 @@ spec:
             the Project Grant). Multi-iter: user/Grant emits once
             project/Grant is observed.
 
-          Caller writes `userId + userOrgId + projectId + projectOrgId
-          + roles` and the composition picks the right Zitadel
-          mechanism. See [[specs/grant-xrd]] for the design.
+          Caller identifies the user and project either by local managed
+          resource references (`userIdRef` + `projectIdRef`) or by explicit
+          Zitadel IDs (`userId + userOrgId + projectId + projectOrgId`). The
+          composition resolves references from status.atProvider and picks the
+          right Zitadel mechanism. See [[specs/grant-xrd]] for the design.
         type: object
         properties:
           spec:
@@ -44,20 +46,65 @@ spec:
                 description: |
                   Zitadel user UUID. Operator copies from the upstream
                   MachineUser / HumanUser MR's status.atProvider.id (or
-                  Zitadel UI).
+                  Zitadel UI). Mutually exclusive with userIdRef.
                 type: string
+              userIdRef:
+                description: |
+                  Reference to a HumanUser or MachineUser managed resource in
+                  the Grant namespace. The composition resolves userId and
+                  userOrgId from status.atProvider.
+                  Mutually exclusive with userId + userOrgId.
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  apiVersion:
+                    type: string
+                    default: user.zitadel.m.crossplane.io/v1alpha1
+                  kind:
+                    type: string
+                    default: HumanUser
+                    enum:
+                    - HumanUser
+                    - MachineUser
+                required:
+                - name
               userOrgId:
                 description: |
                   The user's home Org UUID. For same-Org grants, equal
-                  to projectOrgId.
+                  to projectOrgId. Mutually exclusive with userIdRef.
                 type: string
               projectId:
                 description: |
-                  Target Zitadel Project UUID.
+                  Target Zitadel Project UUID. Mutually exclusive with
+                  projectIdRef.
                 type: string
+              projectIdRef:
+                description: |
+                  Reference to a Project managed resource in the Grant
+                  namespace. The composition resolves projectId and
+                  projectOrgId from status.atProvider.
+                  Mutually exclusive with projectId + projectOrgId.
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  apiVersion:
+                    type: string
+                    default: project.zitadel.m.crossplane.io/v1alpha1
+                  kind:
+                    type: string
+                    default: Project
+                    enum:
+                    - Project
+                required:
+                - name
               projectOrgId:
                 description: |
-                  The Org UUID where the target Project lives.
+                  The Org UUID where the target Project lives. Mutually
+                  exclusive with projectIdRef.
                 type: string
               roles:
                 description: |
@@ -92,11 +139,12 @@ spec:
                 additionalProperties:
                   type: string
                 x-kubernetes-preserve-unknown-fields: true
+            x-kubernetes-validations:
+            - rule: '(has(self.userIdRef) && !has(self.userId) && !has(self.userOrgId)) || (!has(self.userIdRef) && has(self.userId) && has(self.userOrgId))'
+              message: "provide exactly one user source: userIdRef, or userId + userOrgId"
+            - rule: '(has(self.projectIdRef) && !has(self.projectId) && !has(self.projectOrgId)) || (!has(self.projectIdRef) && has(self.projectId) && has(self.projectOrgId))'
+              message: "provide exactly one project source: projectIdRef, or projectId + projectOrgId"
             required:
-            - userId
-            - userOrgId
-            - projectId
-            - projectOrgId
             - roles
             - providerConfigRef
 
@@ -117,6 +165,9 @@ spec:
                   for cross-org mode.
                 type: string
               ready:
+                type: boolean
+              referencesResolved:
+                description: Whether all requested user and project references have IDs.
                 type: boolean
         required:
         - spec

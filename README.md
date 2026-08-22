@@ -105,12 +105,14 @@ See `examples/machineusers/{minimal,with-pat,with-pat-push}.yaml`.
 
 ### `Grant`
 
-First-class membership relationship that ties a Zitadel User to a Project + Roles. Polymorphic dispatch — caller writes `userId + userOrgId + projectId + projectOrgId + roles` and the composition picks the right Zitadel mechanism:
+First-class membership relationship that ties a Zitadel User to a Project + Roles. For GitOps, prefer local references: `userIdRef` points to a HumanUser or MachineUser MR and `projectIdRef` points to a Project MR in the Grant namespace. The composition resolves IDs and Org IDs from each resource's `status.atProvider`, so no live Zitadel UUIDs need to be committed. Explicit `userId + userOrgId + projectId + projectOrgId` inputs remain available for adoption and cross-stack cases.
+
+Polymorphic dispatch then picks the right Zitadel mechanism:
 
 - **Same-Org** (`userOrgId == projectOrgId`): composes one `user.zitadel.m.crossplane.io/Grant` MR (the user's role assignment within the project).
 - **Cross-Org** (`userOrgId != projectOrgId`): composes a `project.zitadel.m.crossplane.io/Grant` (cross-Org Project Grant authorizing the role set for the user's home Org) plus a `user.zitadel.m.crossplane.io/Grant` with `projectGrantId` set (the user's role assignment, pulling roles from the granted set). Multi-iter: user/Grant emits once project/Grant is observed.
 
-See `examples/grants/{same-org,cross-org}.yaml`.
+See `examples/grants/{referenced-same-org,same-org,cross-org}.yaml`.
 
 ## Cross-Stack Integration
 
@@ -122,7 +124,7 @@ See [[specs/auth-stack-zitadel]] for the design and open questions.
 
 - Per-app OIDC client creation (lives with the Zitadel API or the future Zitadel Crossplane provider).
 - Istio `RequestAuthentication` / `AuthorizationPolicy` (per-app concern, may land later).
-- Authentik decommission (per-consumer migration tracked separately).
+- Consumer migration and decommission work is tracked separately.
 
 ## References
 
