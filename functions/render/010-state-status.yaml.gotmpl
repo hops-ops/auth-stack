@@ -127,10 +127,12 @@
 {{- end }}
 
 # ==============================================================================
-# Compute status (function-auto-ready computes the `ready` boolean)
+# Compute the convenience status from the observed Helm release. The
+# function-auto-ready function owns the canonical Ready condition, but it does
+# not populate custom status fields.
 # ==============================================================================
 {{- $state = set $state "status" (dict
-  "ready" false
+  "ready" $relReady
   "oidc" (dict
     "issuerURL" $issuer
     "discoveryURL" $discovery
