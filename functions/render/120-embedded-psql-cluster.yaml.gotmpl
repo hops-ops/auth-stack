@@ -26,6 +26,7 @@ metadata:
     {{ setResourceNameAnnotation "embedded-psql-cluster" }}
   labels: {{ $state.labels | toJson }}
 spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
   clusterName: {{ $state.clusterName }}
   targetNamespace: {{ $state.namespace }}
   labels: {{ $state.labels | toJson }}
