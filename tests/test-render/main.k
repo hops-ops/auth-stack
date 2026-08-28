@@ -156,6 +156,7 @@ _items = [
                 metadata.namespace = "default"
                 spec = {
                     clusterName = "test-cluster"
+                    managementPolicies = ["Observe", "LateInitialize"]
                     domain = "auth.example.com"
                     namespace = "zitadel"
                     firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
@@ -176,6 +177,7 @@ _items = [
                         namespace = "default"
                     }
                     spec = {
+                        managementPolicies = ["Observe", "LateInitialize"]
                         clusterName = "test-cluster"
                         targetNamespace = "zitadel"
                         storage.size = "2Gi"
