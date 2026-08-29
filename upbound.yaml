@@ -7,23 +7,23 @@ spec:
   - apiVersion: pkg.crossplane.io/v1
     kind: Function
     package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
-    version: '>=v0'
+    version: '>=v0 <v1'
   - apiVersion: pkg.crossplane.io/v1
     kind: Provider
     package: xpkg.crossplane.io/crossplane-contrib/provider-helm
-    version: '>=v1'
+    version: '>=v1 <v2'
   - apiVersion: pkg.crossplane.io/v1
     kind: Provider
     package: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes
-    version: '>=v1'
+    version: '>=v1 <v2'
   - apiVersion: pkg.crossplane.io/v1
     kind: Provider
     package: xpkg.crossplane.io/crossplane-contrib/provider-upjet-zitadel
-    version: '>=v0'
+    version: '>=v0 <v1'
   - apiVersion: pkg.crossplane.io/v1
     kind: Provider
     package: xpkg.crossplane.io/crossplane-contrib/provider-aws-secretsmanager
-    version: '>=v2'
+    version: '>=v2 <v3'
   description: AuthStack installs Zitadel as the platform identity provider via the
     upstream Helm chart, with typed integration points for PostgreSQL and Gateway
     API. Also hosts the auth.hops.ops.com.ai primitive XRDs that wrap multi-resource
