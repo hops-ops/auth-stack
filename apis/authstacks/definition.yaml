@@ -186,6 +186,7 @@ spec:
                           version:
                             description: Postgres major version. Defaults to "17".
                             type: string
+                            # renovate: datasource=docker depName=library/postgres registryUrl=https://index.docker.io
                             default: "17"
                           parameters:
                             description: postgres.conf parameters merged into the composed Cluster.spec.postgresql.parameters.

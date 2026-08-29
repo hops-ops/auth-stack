@@ -12,9 +12,13 @@
   },
   "packageRules": [
     {
-      "description": "Automerge minor and patch updates that pass all checks",
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
+      "description": "Require manual merge until an e2e suite exists",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "automerge": false
     },
     {
       "description": "Disable automatic updates for all hops-ops Docker images",
@@ -25,6 +29,14 @@
       "matchPackageNames": [
         "/^hops-ops//"
       ]
+    },
+    {
+      "description": "Group AWS provider-family packages",
+      "matchPackageNames": [
+        "/provider-family-aws/",
+        "/provider-aws-.*/"
+      ],
+      "groupName": "aws-providers"
     },
     {
       "description": "Use feat(deps): commit prefix for hops-ops Crossplane packages (github-releases datasource)",
@@ -80,11 +92,26 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["\\.yaml\\.gotmpl$"],
-      "matchStrings": [
-        "\\s*chart:\\s*name:\\s+(?<depName>.*?)\\s*repository:\\s*(?<registryUrl>.*?)\\s*version:\\s*\"?(?<currentValue>.*?)\"?\\s"
+      "description": "Annotated runtime dependencies in schemas, templates, examples, and tests",
+      "managerFilePatterns": [
+        "apis/**/*.yaml",
+        "examples/**/*.yaml",
+        "functions/**/*.yaml.gotmpl",
+        "tests/**/*.k"
       ],
-      "datasourceTemplate": "helm"
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+[^\\n]*?(?:default\\s+|:=\\s*|[\"']?(?:version|chartVersion|tag|default)[\"']?\\s*(?:[=:]\\s*|\\s+))[\"']?(?<currentValue>v?[0-9][^\\s\"'}]*)",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+[^\\n]*?(?:default\\s+|[\"']?image[\"']?\\s*[=:]\\s*)[\"']?[A-Za-z0-9._/-]+:(?<currentValue>v?[A-Za-z0-9][^\\s\"'}]*)",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+[^\\n]*?package\\s*=\\s*\"[^\"]+:(?<currentValue>[^\"]+)\""
+      ]
     }
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/__fixtures__/**"
   ]
 }

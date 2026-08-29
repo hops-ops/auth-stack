@@ -96,6 +96,7 @@
 {{- if not $embStorage.size }}{{- $embStorage = set $embStorage "size" "2Gi" }}{{- end }}
 {{- if not $embStorage.class }}{{- $embStorage = set $embStorage "class" "psql" }}{{- end }}
 {{- $embPostgres := $dbEmbedded.postgresql | default dict }}
+# renovate: datasource=docker depName=library/postgres registryUrl=https://index.docker.io
 {{- if not $embPostgres.version }}{{- $embPostgres = set $embPostgres "version" "17" }}{{- end }}
 {{- $embInstances := 1 }}
 {{- if hasKey $dbEmbedded "instances" }}{{- $embInstances = $dbEmbedded.instances }}{{- end }}
@@ -167,6 +168,7 @@
 {{- $overrideAllValues := $spec.overrideAllValues | default dict }}
 
 # Chart version pin
+# renovate: datasource=helm depName=zitadel registryUrl=https://charts.zitadel.com
 {{- $chartVersion := $spec.version | default "9.34.1" }}
 
 # Domain & TLS
