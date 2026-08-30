@@ -1,0 +1,177 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: humanusers.auth.hops.ops.com.ai
+spec:
+  group: auth.hops.ops.com.ai
+  names:
+    kind: HumanUser
+    plural: humanusers
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    referenceable: true
+    served: true
+    schema:
+      openAPIV3Schema:
+        description: |
+          HumanUser creates a Zitadel human identity and resolves its
+          organization ID from a stable local managed-resource reference.
+          This keeps generated Zitadel UUIDs out of consumer GitOps while
+          working around provider-upjet-zitadel's HumanUser create path,
+          which requires a concrete orgId even when the provider credential
+          already belongs to that organization.
+        type: object
+        properties:
+          spec:
+            description: HumanUserSpec defines the desired human identity.
+            type: object
+            properties:
+              orgId:
+                description: |
+                  Explicit Zitadel organization UUID. Mutually exclusive with
+                  orgIdRef; prefer orgIdRef for GitOps-created organizations.
+                type: string
+                minLength: 1
+              orgIdRef:
+                description: |
+                  Reference to a namespaced managed resource whose
+                  status.atProvider.orgId supplies the Zitadel organization
+                  UUID. Defaults to a provider-upjet-zitadel Project.
+                  This is an ID source, not an ownership relationship.
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  namespace:
+                    description: Defaults to the HumanUser namespace.
+                    type: string
+                    minLength: 1
+                  apiVersion:
+                    type: string
+                    default: project.zitadel.m.crossplane.io/v1alpha1
+                  kind:
+                    type: string
+                    default: Project
+                required:
+                - name
+              humanUserId:
+                description: |
+                  Existing Zitadel user UUID to adopt. Propagates as the raw
+                  managed resource's crossplane.io/external-name annotation.
+                type: string
+                minLength: 1
+              userName:
+                description: Zitadel username. Defaults to metadata.name.
+                type: string
+                minLength: 1
+              firstName:
+                description: Human user's first name.
+                type: string
+                minLength: 1
+              lastName:
+                description: Human user's last name.
+                type: string
+                minLength: 1
+              displayName:
+                description: Optional display name.
+                type: string
+              nickName:
+                description: Optional nickname.
+                type: string
+              email:
+                description: Human user's email address.
+                type: string
+                minLength: 1
+              phone:
+                description: Optional phone number.
+                type: string
+              preferredLanguage:
+                description: Optional preferred language, such as en.
+                type: string
+              gender:
+                description: Optional Zitadel gender enum value.
+                type: string
+                enum:
+                - GENDER_UNSPECIFIED
+                - GENDER_FEMALE
+                - GENDER_MALE
+                - GENDER_DIVERSE
+              isEmailVerified:
+                description: Whether Zitadel should mark the email verified.
+                type: boolean
+              isPhoneVerified:
+                description: Whether Zitadel should mark the phone verified.
+                type: boolean
+              initialSkipPasswordChange:
+                description: Whether the initial password may be kept on first login.
+                type: boolean
+              initialPasswordSecretRef:
+                description: |
+                  Secret key containing the initial password. The Secret must
+                  exist in the HumanUser namespace; password bytes never enter
+                  the XR or composition function input.
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  key:
+                    type: string
+                    minLength: 1
+                required:
+                - name
+                - key
+              providerConfigRef:
+                description: ProviderConfig for provider-upjet-zitadel.
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    default: ProviderConfig
+                    enum:
+                    - ProviderConfig
+                    - ClusterProviderConfig
+                required:
+                - name
+              managementPolicies:
+                description: Crossplane managementPolicies for the composed HumanUser.
+                type: array
+                items:
+                  type: string
+                default: ["*"]
+              labels:
+                description: |
+                  Custom labels merged with Hops defaults and applied to the
+                  composed managed resource.
+                type: object
+                additionalProperties:
+                  type: string
+                x-kubernetes-preserve-unknown-fields: true
+            x-kubernetes-validations:
+            - rule: '(has(self.orgIdRef) && !has(self.orgId)) || (!has(self.orgIdRef) && has(self.orgId))'
+              message: "provide exactly one organization source: orgIdRef or orgId"
+            required:
+            - firstName
+            - lastName
+            - email
+            - providerConfigRef
+          status:
+            description: Observed identity values for downstream references.
+            type: object
+            properties:
+              userId:
+                description: Observed Zitadel user UUID.
+                type: string
+              orgId:
+                description: Observed Zitadel organization UUID.
+                type: string
+              loginName:
+                description: Observed preferred Zitadel login name.
+                type: string
+        required:
+        - spec

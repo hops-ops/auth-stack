@@ -195,6 +195,62 @@ _items = [
             ]
         }
     },
+
+    # ==========================================================================
+    # Test 6: a Hops HumanUser reference uses its typed status contract while
+    # the Project reference continues to use raw provider atProvider status.
+    # ==========================================================================
+    metav1alpha1.CompositionTest {
+        metadata.name = "hops-human-user-reference-resolves"
+        spec = {
+            compositionPath = "apis/grants/composition.yaml"
+            xrdPath = "apis/grants/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "auth.hops.ops.com.ai/v1alpha1"
+                kind = "Grant"
+                metadata = {name = "alice-grant", namespace = "default"}
+                spec = {
+                    userIdRef = {
+                        name = "e2e-alice"
+                        apiVersion = "auth.hops.ops.com.ai/v1alpha1"
+                        kind = "HumanUser"
+                    }
+                    projectIdRef = {name = "e2e-ui"}
+                    roles = ["user"]
+                    providerConfigRef = {name = "default", kind = "ClusterProviderConfig"}
+                }
+            }
+            extraResources = [
+                {
+                    apiVersion = "auth.hops.ops.com.ai/v1alpha1"
+                    kind = "HumanUser"
+                    metadata = {name = "e2e-alice", namespace = "default"}
+                    status = {userId = "user-123", orgId = "org-456", loginName = "alice"}
+                }
+                {
+                    apiVersion = "project.zitadel.m.crossplane.io/v1alpha1"
+                    kind = "Project"
+                    metadata = {name = "e2e-ui", namespace = "default"}
+                    status.atProvider = {id = "project-123", orgId = "org-456"}
+                }
+            ]
+            assertResources = [
+                {
+                    apiVersion = "user.zitadel.m.crossplane.io/v1alpha1"
+                    kind = "Grant"
+                    metadata.name = "alice-grant-user-grant"
+                    spec.forProvider = {
+                        orgId = "org-456"
+                        projectId = "project-123"
+                        userId = "user-123"
+                        roleKeys = ["user"]
+                    }
+                }
+            ]
+        }
+    },
 ]
 
 items = _items

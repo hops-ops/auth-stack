@@ -56,25 +56,5 @@
   "status" (dict)
 }}
 
-# Ask Crossplane for local user/project managed resources referenced by name.
-# Namespaced extra resources are resolved in the Grant XR's namespace.
-{{- if or $state.userRefName $state.projectRefName }}
----
-apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
-kind: ExtraResources
-requirements:
-  {{- if $state.userRefName }}
-  referenced-user:
-    apiVersion: {{ $state.userRefApiVersion | quote }}
-    kind: {{ $state.userRefKind | quote }}
-    matchName: {{ $state.userRefName | quote }}
-    namespace: {{ $state.namespace | quote }}
-  {{- end }}
-  {{- if $state.projectRefName }}
-  referenced-project:
-    apiVersion: {{ $state.projectRefApiVersion | quote }}
-    kind: {{ $state.projectRefKind | quote }}
-    matchName: {{ $state.projectRefName | quote }}
-    namespace: {{ $state.namespace | quote }}
-  {{- end }}
-{{- end }}
+# The preceding generic template function resolves namespaced user/project
+# references into pipeline context.

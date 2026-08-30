@@ -31,6 +31,8 @@ EXAMPLES := \
     examples/machineusers/minimal.yaml:: \
     examples/machineusers/with-pat.yaml:: \
     examples/machineusers/with-pat-push.yaml:: \
+    examples/humanusers/explicit-org.yaml:: \
+    examples/humanusers/with-org-ref.yaml:: \
     examples/grants/referenced-same-org.yaml:: \
     examples/grants/same-org.yaml:: \
     examples/grants/cross-org.yaml:: \

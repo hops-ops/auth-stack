@@ -1,5 +1,9 @@
 _output/
 .up/
+.venv/
+.tmp/
 node_modules/
 .DS_Store
 apis/**/configuration.yaml
+**/aws-creds
+tests/**/secrets/

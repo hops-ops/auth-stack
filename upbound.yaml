@@ -9,6 +9,10 @@ spec:
     package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
     version: '^v0'
   - apiVersion: pkg.crossplane.io/v1
+    kind: Function
+    package: xpkg.crossplane.io/crossplane-contrib/function-go-templating
+    version: '>=v0.12.3'
+  - apiVersion: pkg.crossplane.io/v1
     kind: Provider
     package: xpkg.crossplane.io/crossplane-contrib/provider-helm
     version: '^v1'
@@ -27,8 +31,9 @@ spec:
   description: AuthStack installs Zitadel as the platform identity provider via the
     upstream Helm chart, with typed integration points for PostgreSQL and Gateway
     API. Also hosts the auth.hops.ops.com.ai primitive XRDs that wrap multi-resource
-    Zitadel patterns — MachineUser (with opt-in PAT + AWS SM push pipeline) and Grant
-    (polymorphic same-Org/cross-Org user-to-project-role assignment).
+    Zitadel patterns — HumanUser (organization-reference resolution), MachineUser
+    (with opt-in PAT + AWS SM push pipeline), and Grant (polymorphic same-Org/cross-Org
+    user-to-project-role assignment).
   license: Apache-2.0
   maintainer: Patrick Lee Scott <pat@patscott.io>
   readme: |

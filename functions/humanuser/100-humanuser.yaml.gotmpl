@@ -1,0 +1,59 @@
+# code: language=yaml
+#
+# Raw provider HumanUser. Render continuously so function-auto-ready cannot
+# treat an unresolved, empty desired set as ready. Crossplane supplies requested
+# resources within the same pipeline run; if the source is genuinely absent,
+# the raw user remains not ready until a concrete orgId arrives.
+#
+
+---
+apiVersion: user.zitadel.m.crossplane.io/v1alpha1
+kind: HumanUser
+metadata:
+  name: {{ $state.name }}
+  annotations:
+    {{ setResourceNameAnnotation "humanuser" }}
+    {{- if ne $state.humanUserId "" }}
+    crossplane.io/external-name: {{ $state.humanUserId | quote }}
+    {{- end }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  forProvider:
+    orgId: {{ $state.resolvedOrgId | quote }}
+    userName: {{ $state.userName | quote }}
+    firstName: {{ $state.spec.firstName | quote }}
+    lastName: {{ $state.spec.lastName | quote }}
+    email: {{ $state.spec.email | quote }}
+    {{- if ne ($state.spec.displayName | default "") "" }}
+    displayName: {{ $state.spec.displayName | quote }}
+    {{- end }}
+    {{- if ne ($state.spec.nickName | default "") "" }}
+    nickName: {{ $state.spec.nickName | quote }}
+    {{- end }}
+    {{- if ne ($state.spec.phone | default "") "" }}
+    phone: {{ $state.spec.phone | quote }}
+    {{- end }}
+    {{- if ne ($state.spec.preferredLanguage | default "") "" }}
+    preferredLanguage: {{ $state.spec.preferredLanguage | quote }}
+    {{- end }}
+    {{- if ne ($state.spec.gender | default "") "" }}
+    gender: {{ $state.spec.gender | quote }}
+    {{- end }}
+    {{- if hasKey $state.spec "isEmailVerified" }}
+    isEmailVerified: {{ $state.spec.isEmailVerified }}
+    {{- end }}
+    {{- if hasKey $state.spec "isPhoneVerified" }}
+    isPhoneVerified: {{ $state.spec.isPhoneVerified }}
+    {{- end }}
+    {{- if hasKey $state.spec "initialSkipPasswordChange" }}
+    initialSkipPasswordChange: {{ $state.spec.initialSkipPasswordChange }}
+    {{- end }}
+    {{- with $state.spec.initialPasswordSecretRef }}
+    initialPasswordSecretRef:
+      name: {{ .name | quote }}
+      key: {{ .key | quote }}
+    {{- end }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  providerConfigRef:
+    name: {{ $state.providerConfigName | quote }}
+    kind: {{ $state.providerConfigKind | quote }}

@@ -1,0 +1,38 @@
+# code: language=yaml
+#
+# Initialize desired state. The preceding generic template function resolves
+# the optional namespaced org-ID source into pipeline context.
+#
+
+{{- $xr := getCompositeResource . }}
+{{- $spec := $xr.spec | default dict }}
+{{- $metadata := $xr.metadata | default dict }}
+{{- $name := $metadata.name }}
+{{- $namespace := $metadata.namespace | default "default" }}
+
+{{- $orgIdRef := $spec.orgIdRef | default dict }}
+{{- $providerConfigRef := $spec.providerConfigRef }}
+{{- $defaultLabels := dict
+  "hops.ops.com.ai/managed" "true"
+  "hops.ops.com.ai/auth-humanuser" $name
+}}
+
+{{- $state := dict
+  "spec" $spec
+  "name" $name
+  "namespace" $namespace
+  "userName" ($spec.userName | default $name)
+  "humanUserId" ($spec.humanUserId | default "")
+  "explicitOrgId" ($spec.orgId | default "")
+  "orgRefName" ($orgIdRef.name | default "")
+  "orgRefNamespace" ($orgIdRef.namespace | default $namespace)
+  "orgRefApiVersion" ($orgIdRef.apiVersion | default "project.zitadel.m.crossplane.io/v1alpha1")
+  "orgRefKind" ($orgIdRef.kind | default "Project")
+  "resolvedOrgId" ""
+  "managementPolicies" ($spec.managementPolicies | default (list "*"))
+  "labels" (merge (dict) $defaultLabels ($spec.labels | default dict))
+  "providerConfigName" $providerConfigRef.name
+  "providerConfigKind" ($providerConfigRef.kind | default "ProviderConfig")
+  "observed" (dict)
+  "status" (dict)
+}}
