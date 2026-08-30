@@ -1,0 +1,47 @@
+# code: language=yaml
+#
+# Resolve the organization ID and extract typed observed status. The composed
+# HumanUser's observed orgId is a sticky fallback so a transient ExtraResources
+# lookup miss never un-renders an existing external user.
+#
+
+{{- $observed := $.observed.resources | default dict }}
+{{- $humanEntry := get $observed "humanuser" | default dict }}
+{{- $humanResource := $humanEntry.resource | default dict }}
+{{- $humanStatus := $humanResource.status | default dict }}
+{{- $humanAtProvider := $humanStatus.atProvider | default dict }}
+{{- $observedUserId := $humanAtProvider.id | default "" }}
+{{- $observedOrgId := $humanAtProvider.orgId | default "" }}
+{{- $observedLoginName := $humanAtProvider.preferredLoginName | default "" }}
+{{- if and (eq $observedLoginName "") (gt (len ($humanAtProvider.loginNames | default list)) 0) }}
+  {{- $observedLoginName = first $humanAtProvider.loginNames }}
+{{- end }}
+
+{{- $resolvedOrgId := $state.explicitOrgId }}
+{{- if $state.orgRefName }}
+  {{- $resources := get ($.context | default dict) "apiextensions.crossplane.io/extra-resources" | default dict }}
+  {{- $matches := get $resources "organization-id-source" | default dict }}
+  {{- range ($matches.items | default list) }}
+    {{- $resource := . }}
+    {{- if hasKey $resource "resource" }}
+      {{- $resource = $resource.resource | default dict }}
+    {{- end }}
+    {{- $resourceMetadata := $resource.metadata | default dict }}
+    {{- if and (eq ($resourceMetadata.name | default "") $state.orgRefName) (eq ($resourceMetadata.namespace | default "default") $state.orgRefNamespace) }}
+      {{- $status := $resource.status | default dict }}
+      {{- $atProvider := $status.atProvider | default dict }}
+      {{- $resolvedOrgId = $atProvider.orgId | default ($status.orgId | default "") }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if and (eq $resolvedOrgId "") (ne $observedOrgId "") }}
+  {{- $resolvedOrgId = $observedOrgId }}
+{{- end }}
+
+{{- $_ := set $state "resolvedOrgId" $resolvedOrgId }}
+{{- $_ := set $state.observed "userId" $observedUserId }}
+{{- $_ := set $state.observed "orgId" $observedOrgId }}
+{{- $_ := set $state.observed "loginName" $observedLoginName }}
+{{- $_ := set $state.status "userId" $observedUserId }}
+{{- $_ := set $state.status "orgId" $observedOrgId }}
+{{- $_ := set $state.status "loginName" $observedLoginName }}

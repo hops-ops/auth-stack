@@ -1,0 +1,14 @@
+# code: language=yaml
+#
+# Typed integration status. Canonical readiness remains the Crossplane Ready
+# condition produced by function-auto-ready; do not duplicate it here.
+#
+
+{{- $xr := getCompositeResource . }}
+---
+apiVersion: {{ $xr.apiVersion }}
+kind: {{ $xr.kind }}
+status:
+  userId: {{ $state.status.userId | default "" | quote }}
+  orgId: {{ $state.status.orgId | default "" | quote }}
+  loginName: {{ $state.status.loginName | default "" | quote }}

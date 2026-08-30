@@ -9,6 +9,39 @@ spec:
   mode: Pipeline
   pipeline:
   - functionRef:
+      name: crossplane-contrib-function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := getCompositeResource . }}
+          {{- $spec := $xr.spec | default dict }}
+          {{- $userRef := $spec.userIdRef | default dict }}
+          {{- $projectRef := $spec.projectIdRef | default dict }}
+          {{- $namespace := $xr.metadata.namespace | default "default" }}
+          {{- if or $userRef.name $projectRef.name }}
+          apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+          kind: ExtraResources
+          requirements:
+            {{- if $userRef.name }}
+            referenced-user:
+              apiVersion: {{ $userRef.apiVersion | default "user.zitadel.m.crossplane.io/v1alpha1" | quote }}
+              kind: {{ $userRef.kind | default "HumanUser" | quote }}
+              matchName: {{ $userRef.name | quote }}
+              namespace: {{ $namespace | quote }}
+            {{- end }}
+            {{- if $projectRef.name }}
+            referenced-project:
+              apiVersion: {{ $projectRef.apiVersion | default "project.zitadel.m.crossplane.io/v1alpha1" | quote }}
+              kind: {{ $projectRef.kind | default "Project" | quote }}
+              matchName: {{ $projectRef.name | quote }}
+              namespace: {{ $namespace | quote }}
+            {{- end }}
+          {{- end }}
+    step: resolve-resource-references
+  - functionRef:
       name: hops-ops-auth-stackgrant
     step: grant
   - functionRef:

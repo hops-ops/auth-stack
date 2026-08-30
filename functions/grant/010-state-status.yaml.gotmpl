@@ -6,18 +6,20 @@
 # Resolve referenced managed resources from status.atProvider. Rendered grants
 # are gated on IDs existing, not on Ready=True, so a transient readiness
 # condition does not remove an already resolvable grant.
-{{- $extra := $.extraResources | default dict }}
+{{- $resources := get ($.context | default dict) "apiextensions.crossplane.io/extra-resources" | default dict }}
 
 {{- if $state.userRefName }}
-  {{- $matches := get $extra "referenced-user" | default dict }}
-  {{- $users := $matches.items | default list }}
-  {{- range $users }}
-    {{- $user := .resource | default dict }}
+  {{- $matches := get $resources "referenced-user" | default dict }}
+  {{- range ($matches.items | default list) }}
+    {{- $user := . }}
+    {{- if hasKey $user "resource" }}
+      {{- $user = $user.resource | default dict }}
+    {{- end }}
     {{- if eq (($user.metadata | default dict).name | default "") $state.userRefName }}
       {{- $status := $user.status | default dict }}
       {{- $atProvider := $status.atProvider | default dict }}
-      {{- $_ := set $state "userId" ($atProvider.id | default "") }}
-      {{- $_ := set $state "userOrgId" ($atProvider.orgId | default "") }}
+      {{- $_ := set $state "userId" ($status.userId | default ($atProvider.id | default "")) }}
+      {{- $_ := set $state "userOrgId" ($status.orgId | default ($atProvider.orgId | default "")) }}
       {{- range ($status.conditions | default list) }}
         {{- if and (eq .type "Ready") (eq .status "True") }}
           {{- $_ := set $state "userRefReady" true }}
@@ -28,10 +30,12 @@
 {{- end }}
 
 {{- if $state.projectRefName }}
-  {{- $matches := get $extra "referenced-project" | default dict }}
-  {{- $projects := $matches.items | default list }}
-  {{- range $projects }}
-    {{- $project := .resource | default dict }}
+  {{- $matches := get $resources "referenced-project" | default dict }}
+  {{- range ($matches.items | default list) }}
+    {{- $project := . }}
+    {{- if hasKey $project "resource" }}
+      {{- $project = $project.resource | default dict }}
+    {{- end }}
     {{- if eq (($project.metadata | default dict).name | default "") $state.projectRefName }}
       {{- $status := $project.status | default dict }}
       {{- $atProvider := $status.atProvider | default dict }}

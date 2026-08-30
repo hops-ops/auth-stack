@@ -82,16 +82,34 @@ status:
 
 ## Auth-group primitives
 
-Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `MachineUser`, `Grant` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
+Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `HumanUser`, `MachineUser`, `Grant` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
 
 Status:
 
 | Kind | Plural | Composes | Status |
 |---|---|---|---|
+| `HumanUser` | `humanusers` | One provider `HumanUser` with organization-ID reference resolution | ✓ |
 | `MachineUser` | `machineusers` | `MachineUser` + opt-in `AccessToken` + opt-in AWS SM `Secret` + ESO `PushSecret` (provider-kubernetes Object) | ✓ |
 | `Grant` | `grants` | `user.zitadel.../Grant` (same-Org) or `project.zitadel.../Grant + user.zitadel.../Grant` with `projectGrantId` (cross-Org) | ✓ |
 
-Single-resource wrappers we deliberately didn't make: `HumanUser`, `IDP`, `OrganizationSsoConfig` (and the previously-attempted `Organization`, `Project`). Operators apply raw Zitadel / OpenPanel MRs directly for those.
+Single-resource wrappers we deliberately didn't make: `IDP`, `OrganizationSsoConfig` (and the previously-attempted `Organization`, `Project`). Operators apply raw Zitadel / OpenPanel MRs directly for those.
+
+### `HumanUser`
+
+Declarative Zitadel human identity with organization-reference resolution. The
+upstream provider documents `orgId` as optional, but its HumanUser v2 create path
+sends an invalid empty organization when it is omitted. `HumanUser` resolves a
+concrete organization UUID from a stable local resource such as a Zitadel
+Project's `status.atProvider.orgId`, then renders the raw provider HumanUser.
+
+Use `spec.orgIdRef` for GitOps so generated UUIDs do not enter the repository, or
+use explicit `spec.orgId` for adoption and external integrations. Initial
+passwords are accepted only by namespaced Secret reference. Typed status exposes
+`userId`, `orgId`, and `loginName` for `Grant` and other consumers. The composed
+resource remains rendered from its own observed `orgId` if the reference lookup
+temporarily disappears.
+
+See `examples/humanusers/{with-org-ref,explicit-org}.yaml`.
 
 ### `MachineUser`
 
@@ -105,7 +123,7 @@ See `examples/machineusers/{minimal,with-pat,with-pat-push}.yaml`.
 
 ### `Grant`
 
-First-class membership relationship that ties a Zitadel User to a Project + Roles. For GitOps, prefer local references: `userIdRef` points to a HumanUser or MachineUser MR and `projectIdRef` points to a Project MR in the Grant namespace. The composition resolves IDs and Org IDs from each resource's `status.atProvider`, so no live Zitadel UUIDs need to be committed. Explicit `userId + userOrgId + projectId + projectOrgId` inputs remain available for adoption and cross-stack cases.
+First-class membership relationship that ties a Zitadel User to a Project + Roles. For GitOps, prefer local references: `userIdRef` points to a raw HumanUser/MachineUser MR or the Hops `HumanUser` XR, and `projectIdRef` points to a Project MR in the Grant namespace. The composition resolves the Hops XR's typed status or raw resources' `status.atProvider`, so no live Zitadel UUIDs need to be committed. Explicit `userId + userOrgId + projectId + projectOrgId` inputs remain available for adoption and cross-stack cases.
 
 Polymorphic dispatch then picks the right Zitadel mechanism:
 

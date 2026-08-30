@@ -50,9 +50,10 @@ spec:
                 type: string
               userIdRef:
                 description: |
-                  Reference to a HumanUser or MachineUser managed resource in
-                  the Grant namespace. The composition resolves userId and
-                  userOrgId from status.atProvider.
+                  Reference to a raw provider HumanUser/MachineUser managed
+                  resource or an auth.hops.ops.com.ai HumanUser XR in the Grant
+                  namespace. The composition resolves userId and userOrgId from
+                  the reference's typed status or status.atProvider.
                   Mutually exclusive with userId + userOrgId.
                 type: object
                 properties:

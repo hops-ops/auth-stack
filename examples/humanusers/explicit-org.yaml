@@ -1,0 +1,13 @@
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: HumanUser
+metadata:
+  name: bob
+  namespace: default
+spec:
+  orgId: "373268222482392664"
+  firstName: Bob
+  lastName: Example
+  email: bob@example.com
+  providerConfigRef:
+    name: default
+    kind: ProviderConfig

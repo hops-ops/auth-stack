@@ -1,0 +1,38 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: humanusers.auth.hops.ops.com.ai
+spec:
+  compositeTypeRef:
+    apiVersion: auth.hops.ops.com.ai/v1alpha1
+    kind: HumanUser
+  mode: Pipeline
+  pipeline:
+  - functionRef:
+      name: crossplane-contrib-function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := getCompositeResource . }}
+          {{- $spec := $xr.spec | default dict }}
+          {{- $ref := $spec.orgIdRef | default dict }}
+          {{- if $ref.name }}
+          apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+          kind: ExtraResources
+          requirements:
+            organization-id-source:
+              apiVersion: {{ $ref.apiVersion | default "project.zitadel.m.crossplane.io/v1alpha1" | quote }}
+              kind: {{ $ref.kind | default "Project" | quote }}
+              matchName: {{ $ref.name | quote }}
+              namespace: {{ $ref.namespace | default ($xr.metadata.namespace | default "default") | quote }}
+          {{- end }}
+    step: resolve-organization-reference
+  - functionRef:
+      name: hops-ops-auth-stackhumanuser
+    step: humanuser
+  - functionRef:
+      name: crossplane-contrib-function-auto-ready
+    step: crossplane-contrib-function-auto-ready

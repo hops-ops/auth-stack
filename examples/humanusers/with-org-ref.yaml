@@ -1,0 +1,20 @@
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: HumanUser
+metadata:
+  name: alice
+  namespace: default
+spec:
+  orgIdRef:
+    name: platform
+  firstName: Alice
+  lastName: Example
+  displayName: Alice
+  email: alice@example.com
+  isEmailVerified: true
+  initialSkipPasswordChange: true
+  initialPasswordSecretRef:
+    name: human-passwords
+    key: alice
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig
