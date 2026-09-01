@@ -1,0 +1,35 @@
+# code: language=yaml
+
+---
+apiVersion: application.zitadel.m.crossplane.io/v1alpha1
+kind: Oidc
+metadata:
+  name: {{ $state.name }}
+  namespace: {{ $state.namespace | quote }}
+  annotations:
+    {{ setResourceNameAnnotation "oidc" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  forProvider:
+    name: {{ $state.applicationName | quote }}
+    projectId: {{ $state.spec.projectId | quote }}
+    appType: OIDC_APP_TYPE_WEB
+    authMethodType: OIDC_AUTH_METHOD_TYPE_BASIC
+    grantTypes:
+    - OIDC_GRANT_TYPE_AUTHORIZATION_CODE
+    - OIDC_GRANT_TYPE_REFRESH_TOKEN
+    responseTypes:
+    - OIDC_RESPONSE_TYPE_CODE
+    redirectUris: {{ $state.spec.redirectUris | toJson }}
+    postLogoutRedirectUris: {{ $state.spec.postLogoutRedirectUris | default (list) | toJson }}
+    accessTokenType: OIDC_TOKEN_TYPE_BEARER
+    accessTokenRoleAssertion: true
+    idTokenRoleAssertion: true
+    idTokenUserinfoAssertion: true
+    devMode: false
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  writeConnectionSecretToRef:
+    name: {{ $state.connectionSecretName | quote }}
+  providerConfigRef:
+    name: {{ $state.providerConfigName | quote }}
+    kind: ProviderConfig

@@ -1,6 +1,6 @@
 # auth-stack
 
-Installs Zitadel into a Kubernetes cluster as the platform identity provider, and hosts a focused set of `auth.hops.ops.com.ai` primitive XRDs (`HumanUser`, `MachineUser`, `Grant`, `IDP`) that compose against the installed Zitadel.
+Installs Zitadel into a Kubernetes cluster as the platform identity provider, and hosts a focused set of `auth.hops.ops.com.ai` primitive XRDs (`HumanUser`, `MachineUser`, `Grant`, `OIDCClient`) that compose against the installed Zitadel.
 
 The stack XRD (`AuthStack`) wraps the upstream `zitadel/zitadel` Helm chart — handling the namespace, database wiring, Gateway API routing, and re-projecting chart-managed bootstrap secrets (admin PAT + login-client PAT) into XR status for downstream consumers.
 
@@ -82,7 +82,7 @@ status:
 
 ## Auth-group primitives
 
-Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `HumanUser`, `MachineUser`, `Grant` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
+Per [[specs/identity-architecture]], the auth-group primitive XRDs that have substantive composition value-add — `HumanUser`, `MachineUser`, `Grant`, `OIDCClient` — live in this repo alongside `AuthStack` under the `auth.hops.ops.com.ai` group.
 
 Status:
 
@@ -91,6 +91,7 @@ Status:
 | `HumanUser` | `humanusers` | One provider `HumanUser` with organization-ID reference resolution | ✓ |
 | `MachineUser` | `machineusers` | `MachineUser` + opt-in `AccessToken` + opt-in AWS SM `Secret` + ESO `PushSecret` (provider-kubernetes Object) | ✓ |
 | `Grant` | `grants` | `user.zitadel.../Grant` (same-Org) or `project.zitadel.../Grant + user.zitadel.../Grant` with `projectGrantId` (cross-Org) | ✓ |
+| `OIDCClient` | `oidcclients` | provider-kubernetes ESO bridge + namespaced Zitadel ProviderConfig + OIDC application + connection Secret | ✓ |
 
 Single-resource wrappers we deliberately didn't make: `IDP`, `OrganizationSsoConfig` (and the previously-attempted `Organization`, `Project`). Operators apply raw Zitadel / OpenPanel MRs directly for those.
 
@@ -132,15 +133,33 @@ Polymorphic dispatch then picks the right Zitadel mechanism:
 
 See `examples/grants/{referenced-same-org,same-org,cross-org}.yaml`.
 
+### `OIDCClient`
+
+Declarative Zitadel web client for a namespaced consumer. `OIDCClient` reads an
+existing provider bootstrap token through an ExternalSecret applied by
+provider-kubernetes, creates a same-namespace Zitadel ProviderConfig and OIDC
+application, and writes the generated client ID and secret to the
+consumer-selected Secret name. Exact redirect URIs are required because Zitadel
+does not support wildcard callback URIs.
+
+The XR assumes External Secrets, provider-kubernetes,
+provider-upjet-zitadel, and its referenced SecretStore are already installed.
+Missing dependencies leave the XR unready; they never produce an
+unauthenticated fallback. See
+`examples/oidcclients/storybook-preview.yaml`.
+
 ## Cross-Stack Integration
 
-The intent is for consumer stacks (gitops/ArgoCD, observe/Grafana, the-website) to wire to AuthStack's status surface rather than configuring OIDC manually. Today, those consumers still need a Zitadel OIDC application created out-of-band (via the Zitadel UI/API) and a client ID/secret provided to them. Once the Zitadel Crossplane provider lands, consumer stacks can declaratively create OIDC applications by referencing `status.bootstrap.iamAdminPatSecretRef`.
+Consumer stacks (gitops/ArgoCD, observe/Grafana, the-website) should wire to
+AuthStack's status surface rather than configuring OIDC manually. Namespaced
+workloads can use `OIDCClient` when they need an independently owned web client
+and connection Secret. Larger stacks can continue composing Zitadel managed
+resources directly when they already own the provider lifecycle.
 
 See [[specs/auth-stack-zitadel]] for the design and open questions.
 
 ## Out of Scope
 
-- Per-app OIDC client creation (lives with the Zitadel API or the future Zitadel Crossplane provider).
 - Istio `RequestAuthentication` / `AuthorizationPolicy` (per-app concern, may land later).
 - Consumer migration and decommission work is tracked separately.
 

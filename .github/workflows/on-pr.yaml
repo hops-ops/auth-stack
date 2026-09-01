@@ -40,6 +40,7 @@ jobs:
           { "example": "examples/machineusers/with-pat-push.yaml","api_path": "apis/machineusers" },
           { "example": "examples/humanusers/explicit-org.yaml",   "api_path": "apis/humanusers" },
           { "example": "examples/humanusers/with-org-ref.yaml",   "api_path": "apis/humanusers" },
+          { "example": "examples/oidcclients/storybook-preview.yaml", "api_path": "apis/oidcclients" },
           { "example": "examples/grants/same-org.yaml",            "api_path": "apis/grants" },
           { "example": "examples/grants/cross-org.yaml",           "api_path": "apis/grants" }
         ]

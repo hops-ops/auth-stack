@@ -1,0 +1,9 @@
+# code: language=yaml
+
+{{- $observed := $.observed.resources | default dict }}
+{{- $oidcEntry := get $observed "oidc" | default dict }}
+{{- $oidcResource := $oidcEntry.resource | default dict }}
+{{- $atProvider := ($oidcResource.status | default dict).atProvider | default dict }}
+
+{{- $_ := set $state.status "applicationId" ($atProvider.id | default "") }}
+{{- $_ := set $state.status "clientId" ($atProvider.clientId | default "") }}

@@ -33,6 +33,8 @@ EXAMPLES := \
     examples/machineusers/with-pat-push.yaml:: \
     examples/humanusers/explicit-org.yaml:: \
     examples/humanusers/with-org-ref.yaml:: \
+    examples/oidcclients/storybook-preview.yaml:: \
+    examples/oidcclients/storybook-preview.yaml::tests/test-oidcclient/observed/ready.yaml \
     examples/grants/referenced-same-org.yaml:: \
     examples/grants/same-org.yaml:: \
     examples/grants/cross-org.yaml:: \

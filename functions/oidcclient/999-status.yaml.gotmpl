@@ -1,0 +1,9 @@
+# code: language=yaml
+
+{{- $xr := getCompositeResource . }}
+---
+apiVersion: {{ $xr.apiVersion }}
+kind: {{ $xr.kind }}
+status:
+  applicationId: {{ $state.status.applicationId | default "" | quote }}
+  clientId: {{ $state.status.clientId | default "" | quote }}
