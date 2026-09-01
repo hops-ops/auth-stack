@@ -1,0 +1,47 @@
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: gitkb-storybook-pr-381-kubernetes
+  namespace: gitkb-storybook-pr-381
+  annotations:
+    crossplane.io/composition-resource-name: kubernetes-providerconfig
+    gotemplating.fn.crossplane.io/composition-resource-name: kubernetes-providerconfig
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: gitkb-storybook-pr-381-zitadel-credentials
+  namespace: gitkb-storybook-pr-381
+  annotations:
+    crossplane.io/composition-resource-name: credentials
+    gotemplating.fn.crossplane.io/composition-resource-name: credentials
+status:
+  conditions:
+  - type: Ready
+    status: "True"
+---
+apiVersion: zitadel.m.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: gitkb-storybook-pr-381
+  namespace: gitkb-storybook-pr-381
+  annotations:
+    crossplane.io/composition-resource-name: providerconfig
+    gotemplating.fn.crossplane.io/composition-resource-name: providerconfig
+---
+apiVersion: application.zitadel.m.crossplane.io/v1alpha1
+kind: Oidc
+metadata:
+  name: gitkb-storybook-pr-381
+  namespace: gitkb-storybook-pr-381
+  annotations:
+    crossplane.io/composition-resource-name: oidc
+    gotemplating.fn.crossplane.io/composition-resource-name: oidc
+status:
+  atProvider:
+    id: app-123
+    clientId: client-123
+  conditions:
+  - type: Ready
+    status: "True"

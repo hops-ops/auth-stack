@@ -1,0 +1,19 @@
+# code: language=yaml
+
+---
+apiVersion: zitadel.m.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: {{ $state.providerConfigName }}
+  namespace: {{ $state.namespace | quote }}
+  annotations:
+    {{ setResourceNameAnnotation "providerconfig" }}
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels: {{ $state.labels | toJson }}
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      name: {{ $state.providerSecretName | quote }}
+      namespace: {{ $state.namespace | quote }}
+      key: credentials

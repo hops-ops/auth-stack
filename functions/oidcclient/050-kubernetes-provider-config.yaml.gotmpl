@@ -1,0 +1,19 @@
+# code: language=yaml
+#
+# provider-kubernetes applies the ExternalSecret manifest without requiring the
+# auth package to vendor the ESO CRD schema. The provider runs in-cluster and is
+# scoped by the platform's existing provider RBAC.
+
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: {{ $state.kubernetesProviderConfigName }}
+  namespace: {{ $state.namespace | quote }}
+  annotations:
+    {{ setResourceNameAnnotation "kubernetes-providerconfig" }}
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels: {{ $state.labels | toJson }}
+spec:
+  credentials:
+    source: InjectedIdentity

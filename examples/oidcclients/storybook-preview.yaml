@@ -1,0 +1,21 @@
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: OIDCClient
+metadata:
+  name: gitkb-storybook-pr-381
+  namespace: gitkb-storybook-pr-381
+spec:
+  projectId: "388072041921654063"
+  redirectUris:
+  - https://gitkb-storybook-pr-381.p0.gitkb.com/oauth2/callback
+  postLogoutRedirectUris:
+  - https://gitkb-storybook-pr-381.p0.gitkb.com/
+  connectionSecretRef:
+    name: gitkb-storybook-oidc-client
+  credentials:
+    domain: auth.p0.gitkb.com
+    secretStoreRef:
+      name: aws-secrets-manager
+      kind: ClusterSecretStore
+    remoteRef:
+      key: push/production/zitadel-credentials
+      property: access_token

@@ -1,0 +1,41 @@
+# code: language=yaml
+#
+# A consumer owns one namespaced XR and receives one namespaced connection
+# Secret. The cluster must already provide ESO, provider-upjet-zitadel, and the
+# referenced SecretStore; absence leaves the XR unready rather than degrading
+# to unauthenticated access.
+
+{{- $xr := getCompositeResource . }}
+{{- $spec := $xr.spec | default dict }}
+{{- $credentials := $spec.credentials }}
+{{- $remoteRef := $credentials.remoteRef }}
+{{- $storeRef := $credentials.secretStoreRef }}
+{{- $metadata := $xr.metadata | default dict }}
+{{- $name := $metadata.name }}
+{{- $namespace := $metadata.namespace | default "default" }}
+{{- $applicationName := $spec.applicationName | default $name }}
+{{- $providerSecretName := printf "%s-zitadel-credentials" $name | trunc 63 | trimSuffix "-" }}
+{{- $defaultLabels := dict
+  "hops.ops.com.ai/managed" "true"
+  "hops.ops.com.ai/auth-oidc-client" $name
+}}
+
+{{- $state := dict
+  "spec" $spec
+  "name" $name
+  "namespace" $namespace
+  "applicationName" $applicationName
+  "providerSecretName" $providerSecretName
+  "kubernetesProviderConfigName" (printf "%s-kubernetes" $name | trunc 63 | trimSuffix "-")
+  "providerConfigName" $name
+  "connectionSecretName" $spec.connectionSecretRef.name
+  "domain" $credentials.domain
+  "storeName" $storeRef.name
+  "storeKind" ($storeRef.kind | default "ClusterSecretStore")
+  "remoteKey" $remoteRef.key
+  "remoteProperty" ($remoteRef.property | default "access_token")
+  "refreshInterval" ($spec.refreshInterval | default "1h")
+  "managementPolicies" ($spec.managementPolicies | default (list "*"))
+  "labels" (merge (dict) $defaultLabels ($spec.labels | default dict))
+  "status" (dict)
+}}

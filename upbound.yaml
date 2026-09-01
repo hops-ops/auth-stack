@@ -32,8 +32,9 @@ spec:
     upstream Helm chart, with typed integration points for PostgreSQL and Gateway
     API. Also hosts the auth.hops.ops.com.ai primitive XRDs that wrap multi-resource
     Zitadel patterns — HumanUser (organization-reference resolution), MachineUser
-    (with opt-in PAT + AWS SM push pipeline), and Grant (polymorphic same-Org/cross-Org
-    user-to-project-role assignment).
+    (with opt-in PAT + AWS SM push pipeline), Grant (polymorphic same-Org/cross-Org
+    user-to-project-role assignment), and OIDCClient (preview-safe Zitadel web
+    application lifecycle with namespaced credential delivery).
   license: Apache-2.0
   maintainer: Patrick Lee Scott <pat@patscott.io>
   readme: |
