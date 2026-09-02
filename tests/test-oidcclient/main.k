@@ -140,6 +140,69 @@ items = [
                     metadata.name = "storybook-pr-381"
                     status = {applicationId = "app-123", clientId = "client-123"}
                 }
+                {
+                    apiVersion = "protection.crossplane.io/v1beta1"
+                    kind = "Usage"
+                    metadata = {
+                        name = "storybook-pr-381-delete-credentials-before-kubernetes-providerconfig"
+                        namespace = "storybook-pr-381"
+                    }
+                    spec = {
+                        replayDeletion = True
+                        of = {
+                            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                            kind = "ProviderConfig"
+                            resourceRef.name = "storybook-pr-381-kubernetes"
+                        }
+                        by = {
+                            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                            kind = "Object"
+                            resourceRef.name = "storybook-pr-381-zitadel-credentials"
+                        }
+                    }
+                }
+                {
+                    apiVersion = "protection.crossplane.io/v1beta1"
+                    kind = "Usage"
+                    metadata = {
+                        name = "storybook-pr-381-delete-zitadel-providerconfig-before-credentials"
+                        namespace = "storybook-pr-381"
+                    }
+                    spec = {
+                        replayDeletion = True
+                        of = {
+                            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                            kind = "Object"
+                            resourceRef.name = "storybook-pr-381-zitadel-credentials"
+                        }
+                        by = {
+                            apiVersion = "zitadel.m.crossplane.io/v1beta1"
+                            kind = "ProviderConfig"
+                            resourceRef.name = "storybook-pr-381"
+                        }
+                    }
+                }
+                {
+                    apiVersion = "protection.crossplane.io/v1beta1"
+                    kind = "Usage"
+                    metadata = {
+                        name = "storybook-pr-381-delete-oidc-before-zitadel-providerconfig"
+                        namespace = "storybook-pr-381"
+                    }
+                    spec = {
+                        replayDeletion = True
+                        of = {
+                            apiVersion = "zitadel.m.crossplane.io/v1beta1"
+                            kind = "ProviderConfig"
+                            resourceRef.name = "storybook-pr-381"
+                        }
+                        by = {
+                            apiVersion = "application.zitadel.m.crossplane.io/v1alpha1"
+                            kind = "Oidc"
+                            resourceRef.name = "storybook-pr-381"
+                        }
+                    }
+                }
             ]
         }
     }

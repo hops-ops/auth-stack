@@ -17,3 +17,29 @@ spec:
       name: {{ $state.providerSecretName | quote }}
       namespace: {{ $state.namespace | quote }}
       key: credentials
+
+{{- /* Keep the Zitadel ProviderConfig and its credentials available while the
+       provider deletes the external OIDC application. */}}
+{{- if and $state.observed.providerConfigReady $state.observed.oidcReady }}
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ printf "%s-delete-oidc-before-zitadel-providerconfig" $state.name }}
+  namespace: {{ $state.namespace | quote }}
+  annotations:
+    {{ setResourceNameAnnotation "usage-oidc-zitadel-providerconfig" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: zitadel.m.crossplane.io/v1beta1
+    kind: ProviderConfig
+    resourceRef:
+      name: {{ $state.providerConfigName | quote }}
+  by:
+    apiVersion: application.zitadel.m.crossplane.io/v1alpha1
+    kind: Oidc
+    resourceRef:
+      name: {{ $state.name | quote }}
+{{- end }}

@@ -17,3 +17,29 @@ metadata:
 spec:
   credentials:
     source: InjectedIdentity
+
+{{- /* Keep provider-kubernetes available while it deletes the ExternalSecret
+       Object. ProviderConfigs are composition-ready once observed. */}}
+{{- if and $state.observed.kubernetesProviderConfigReady $state.observed.credentialsReady }}
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ printf "%s-delete-credentials-before-kubernetes-providerconfig" $state.name }}
+  namespace: {{ $state.namespace | quote }}
+  annotations:
+    {{ setResourceNameAnnotation "usage-credentials-kubernetes-providerconfig" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  replayDeletion: true
+  of:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: ProviderConfig
+    resourceRef:
+      name: {{ $state.kubernetesProviderConfigName | quote }}
+  by:
+    apiVersion: kubernetes.m.crossplane.io/v1alpha1
+    kind: Object
+    resourceRef:
+      name: {{ $state.providerSecretName | quote }}
+{{- end }}
