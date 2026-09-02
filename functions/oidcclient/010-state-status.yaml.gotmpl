@@ -1,9 +1,42 @@
 # code: language=yaml
 
 {{- $observed := $.observed.resources | default dict }}
+
+# ProviderConfigs do not publish Ready conditions. Their templates opt into
+# immediate composition readiness, so observed existence is their readiness
+# signal for Usage creation.
+{{- $kubernetesProviderConfigEntry := get $observed "kubernetes-providerconfig" | default dict }}
+{{- $kubernetesProviderConfigResource := $kubernetesProviderConfigEntry.resource | default dict }}
+{{- $kubernetesProviderConfigReady := not (empty (($kubernetesProviderConfigResource.metadata | default dict).name | default "")) }}
+
+{{- $credentialsEntry := get $observed "credentials" | default dict }}
+{{- $credentialsResource := $credentialsEntry.resource | default dict }}
+{{- $credentialsReady := false }}
+{{- range (($credentialsResource.status | default dict).conditions | default list) }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}
+    {{- $credentialsReady = true }}
+  {{- end }}
+{{- end }}
+
+{{- $providerConfigEntry := get $observed "providerconfig" | default dict }}
+{{- $providerConfigResource := $providerConfigEntry.resource | default dict }}
+{{- $providerConfigReady := not (empty (($providerConfigResource.metadata | default dict).name | default "")) }}
+
 {{- $oidcEntry := get $observed "oidc" | default dict }}
 {{- $oidcResource := $oidcEntry.resource | default dict }}
 {{- $atProvider := ($oidcResource.status | default dict).atProvider | default dict }}
+{{- $oidcReady := false }}
+{{- range (($oidcResource.status | default dict).conditions | default list) }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}
+    {{- $oidcReady = true }}
+  {{- end }}
+{{- end }}
 
+{{- $_ := set $state "observed" (dict
+  "kubernetesProviderConfigReady" $kubernetesProviderConfigReady
+  "credentialsReady" $credentialsReady
+  "providerConfigReady" $providerConfigReady
+  "oidcReady" $oidcReady
+) }}
 {{- $_ := set $state.status "applicationId" ($atProvider.id | default "") }}
 {{- $_ := set $state.status "clientId" ($atProvider.clientId | default "") }}
