@@ -148,3 +148,12 @@
     "ready" $smtp.render
   )
 ) }}
+
+# The ConfigMap is written by a read-only metadata probe, not a desired input.
+{{- $discoveryEntry := get $observed "instance-metadata" | default dict }}
+{{- $instanceId := dig "resource" "status" "atProvider" "manifest" "data" "instanceId" "" $discoveryEntry }}
+{{- $_ := set $state.status "instanceId" $instanceId }}
+
+{{- if $state.instanceDiscovery.enabled }}
+{{- $_ := set $state.status "ready" (and $relReady (ne $instanceId "")) }}
+{{- end }}

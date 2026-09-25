@@ -168,3 +168,28 @@ See [[specs/auth-stack-zitadel]] for the design and open questions.
 - Spec: `[[specs/auth-stack-zitadel]]`
 - Task: `[[tasks/auth-stack]]`
 - Upstream chart: `zitadel/zitadel` 9.34.1 (ships Zitadel v4)
+
+## System API and instance metadata
+
+AuthStack accepts optional `systemAPIUsers`: each entry has `id`,
+`publicKeySecretRef: {name, key}`, and optional `memberships` entries
+(`memberType`, `roles`, optional `aggregateId`). Keys must exist in the target
+install namespace. Only public key files are mounted; generate and persist
+private keys outside AuthStack and deliver them to provider consumers via ESO.
+No user or hostname is enabled by default. Omitting memberships grants Zitadel's
+SYSTEM_OWNER default; specify memberships explicitly when narrower access fits.
+
+Set `instanceDiscovery.enabled: true` with an explicit `internalURL` to publish
+`status.instanceId`. A bounded Job reads the chart-generated IAM PAT, queries
+instance metadata, and patches only its named ConfigMap. It never mutates
+Zitadel. `firstInstance.enabled` must remain enabled for this discovery mode.
+The ConfigMap is observed without Update management so reconcile cannot erase
+the probe's result. Recreating an instance requires recreating the discovery
+Job/ConfigMap alongside it. The default discovery image is Python 3.13.7 Alpine;
+set `instanceDiscovery.image` to an approved mirror/digest when required.
+
+These additions let consumers use provider CustomDomain/TrustedDomain resources
+without carrying instance IDs in git. Project domains and browser ingress remain
+consumer/platform responsibilities. `spec.domain` is always supplied by the
+installation: cloud examples use real domains; only local CLI templates use
+localhost. Existing installations have both features disabled unless requested.

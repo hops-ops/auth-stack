@@ -190,6 +190,34 @@
   "env" $dbEnv
 }}
 
+# System API users are explicit, environment-neutral inputs. Mount only public
+# keys into Zitadel; provider credentials/private keys never enter Helm values.
+{{- $systemUsers := dict }}
+{{- $systemVolumes := list }}
+{{- $systemMounts := list }}
+{{- range $user := $state.systemAPIUsers }}
+  {{- $volumeName := printf "system-api-%s" ($user.id | sha256sum | trunc 16) }}
+  {{- $mountPath := printf "/system-api/%s" $user.id }}
+  {{- $config := dict "Path" (printf "%s/public.pem" $mountPath) }}
+  {{- $memberships := list }}
+  {{- range ($user.memberships | default list) }}
+    {{- $membership := dict "MemberType" .memberType "Roles" .roles }}
+    {{- if .aggregateId }}{{- $_ := set $membership "AggregateID" .aggregateId }}{{- end }}
+    {{- $memberships = append $memberships $membership }}
+  {{- end }}
+  {{- if $memberships }}{{- $_ := set $config "Memberships" $memberships }}{{- end }}
+  {{- $_ := set $systemUsers $user.id $config }}
+  {{- $systemVolumes = append $systemVolumes (dict "name" $volumeName "secret" (dict
+    "secretName" $user.publicKeySecretRef.name
+    "items" (list (dict "key" $user.publicKeySecretRef.key "path" "public.pem")) )) }}
+  {{- $systemMounts = append $systemMounts (dict "name" $volumeName "mountPath" $mountPath "readOnly" true) }}
+{{- end }}
+{{- if $systemUsers }}
+  {{- $_ := set $cmCfg "SystemAPIUsers" $systemUsers }}
+  {{- $_ := set $chartDefaults "extraVolumes" $systemVolumes }}
+  {{- $_ := set $chartDefaults "extraVolumeMounts" $systemMounts }}
+{{- end }}
+
 # Gateway API wiring (HTTPRoute + GRPCRoute drive off chart-native fields)
 {{- if $gw.enabled }}
   {{- $parentRef := dict "name" $gw.parentRef.name }}

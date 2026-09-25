@@ -10,6 +10,9 @@ apiVersion: {{ $xr.apiVersion }}
 kind: {{ $xr.kind }}
 status:
   ready: {{ $s.ready }}
+  {{- if $s.instanceId }}
+  instanceId: {{ $s.instanceId | quote }}
+  {{- end }}
   oidc:
     issuerURL: {{ $s.oidc.issuerURL | quote }}
     discoveryURL: {{ $s.oidc.discoveryURL | quote }}

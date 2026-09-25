@@ -1,0 +1,122 @@
+# Read-only API discovery. The Job can patch only its metadata ConfigMap.
+# No domain/user/project API writes and no credential values in status.
+{{- if $state.instanceDiscovery.enabled }}
+{{- if not $state.firstInstance.enabled }}{{- fail "instanceDiscovery requires firstInstance.enabled" }}{{- end }}
+{{- $discoveryName := printf "%s-instance" $state.name }}
+{{- $ns := $state.namespace }}
+{{- $jobRevision := dict "domain" $state.domain "url" $state.instanceDiscovery.internalURL "image" ($state.instanceDiscovery.image | default "python:3.13.7-alpine3.22") "admin" $state.firstInstance.iamAdmin.username | toJson | sha256sum | trunc 8 }}
+{{- $sa := dict "apiVersion" "v1" "kind" "ServiceAccount" "metadata" (dict "name" $discoveryName "namespace" $ns) }}
+{{- $cm := dict "apiVersion" "v1" "kind" "ConfigMap" "metadata" (dict "name" $discoveryName "namespace" $ns) }}
+{{- $role := dict "apiVersion" "rbac.authorization.k8s.io/v1" "kind" "Role" "metadata" (dict "name" $discoveryName "namespace" $ns)
+  "rules" (list (dict "apiGroups" (list "") "resources" (list "configmaps") "resourceNames" (list $discoveryName) "verbs" (list "get" "patch"))) }}
+{{- $binding := dict "apiVersion" "rbac.authorization.k8s.io/v1" "kind" "RoleBinding" "metadata" (dict "name" $discoveryName "namespace" $ns)
+  "roleRef" (dict "apiGroup" "rbac.authorization.k8s.io" "kind" "Role" "name" $discoveryName)
+  "subjects" (list (dict "kind" "ServiceAccount" "name" $discoveryName "namespace" $ns)) }}
+{{- range $key, $manifest := dict "instance-serviceaccount" $sa "instance-metadata" $cm "instance-role" $role "instance-rolebinding" $binding }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-{{ $key }}
+  annotations:
+    {{ setResourceNameAnnotation $key }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  {{- if eq $key "instance-metadata" }}
+  # The probe owns data. Crossplane creates and observes but never overwrites it.
+  {{- if has "*" $state.managementPolicies }}
+  managementPolicies: [Create, Observe, Delete]
+  {{- else }}
+  managementPolicies: {{ without $state.managementPolicies "Update" "LateInitialize" | toJson }}
+  {{- end }}
+  readiness:
+    policy: DeriveFromCelQuery
+    celQuery: 'has(object.data) && "instanceId" in object.data && object.data.instanceId != ""'
+  {{- else }}
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  {{- end }}
+  forProvider:
+    manifest: {{ $manifest | toJson }}
+  providerConfigRef: {{ $state.kubernetesProviderConfigRef | toJson }}
+{{- end }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-instance-discovery
+  annotations:
+    {{ setResourceNameAnnotation "instance-discovery" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        # Endpoint, image or PAT changes produce a new Job (immutable pod template).
+        name: {{ printf "%s-discover-%s" $state.name $jobRevision }}
+        namespace: {{ $ns }}
+      spec:
+        activeDeadlineSeconds: 600
+        backoffLimit: 3
+        template:
+          spec:
+            serviceAccountName: {{ $discoveryName }}
+            restartPolicy: OnFailure
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65532
+              fsGroup: 65532
+              seccompProfile: {type: RuntimeDefault}
+            containers:
+              - name: discover
+                image: {{ $state.instanceDiscovery.image | default "python:3.13.7-alpine3.22" }}
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities: {drop: [ALL]}
+                resources:
+                  requests: {cpu: 10m, memory: 24Mi}
+                  limits: {cpu: 100m, memory: 64Mi}
+                env:
+                  - {name: ZITADEL_URL, value: {{ $state.instanceDiscovery.internalURL | quote }}}
+                  - {name: ZITADEL_HOST, value: {{ $state.domain | quote }}}
+                  - {name: METADATA_NAME, value: {{ $discoveryName | quote }}}
+                command: [python3, -c]
+                args:
+                  - |
+                    import json, os, pathlib, ssl, time, urllib.request
+                    base = pathlib.Path('/var/run/secrets/kubernetes.io/serviceaccount')
+                    namespace = (base / 'namespace').read_text().strip()
+                    tls = ssl.create_default_context(cafile=str(base / 'ca.crt'))
+                    for attempt in range(110):
+                        try:
+                            pat = pathlib.Path('/zitadel-pat/pat').read_text().strip()
+                            request = urllib.request.Request(os.environ['ZITADEL_URL'].rstrip('/') + '/admin/v1/instances/me', headers={
+                                'Authorization': 'Bearer ' + pat, 'Host': os.environ['ZITADEL_HOST']})
+                            with urllib.request.urlopen(request, timeout=10) as response:
+                                instance_id = json.load(response)['instance']['id']
+                            if not instance_id:
+                                raise ValueError('empty instance id')
+                            url = 'https://kubernetes.default.svc/api/v1/namespaces/' + namespace + '/configmaps/' + os.environ['METADATA_NAME']
+                            request = urllib.request.Request(url, method='PATCH', data=json.dumps({'data': {'instanceId': instance_id}}).encode(), headers={
+                                'Authorization': 'Bearer ' + (base / 'token').read_text().strip(), 'Content-Type': 'application/merge-patch+json'})
+                            with urllib.request.urlopen(request, context=tls, timeout=10) as response:
+                                response.read()
+                            print('Instance metadata published')
+                            break
+                        except Exception as error:
+                            # Never print requests, bodies, or bearer credentials.
+                            print('Waiting for instance metadata: ' + type(error).__name__, flush=True)
+                            time.sleep(5)
+                    else:
+                        raise SystemExit('Instance discovery did not converge')
+                volumeMounts:
+                  - {name: admin-pat, mountPath: /zitadel-pat, readOnly: true}
+            volumes:
+              - name: admin-pat
+                secret:
+                  secretName: {{ printf "%s-pat" $state.firstInstance.iamAdmin.username }}
+  providerConfigRef: {{ $state.kubernetesProviderConfigRef | toJson }}
+{{- end }}
