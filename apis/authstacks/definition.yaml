@@ -74,15 +74,28 @@ spec:
                 properties:
                   enabled: {type: boolean, default: false}
                   internalURL:
-                    description: In-cluster Zitadel API origin reachable from the install namespace (for example http://zitadel.zitadel.svc.cluster.local:8080).
+                    description: Origin of this stack's Zitadel Service (HTTPS by default), with explicit service port and no path. Host must match the rendered chart Service in the install namespace.
                     type: string
-                    pattern: '^https?://'
+                    pattern: '^https?://[a-z0-9-]+[.][a-z0-9-]+[.]svc([.]cluster[.]local)?:[0-9]+$'
+                  allowInsecureHTTP:
+                    description: Explicit opt-in for trusted local clusters with plaintext Service traffic. Never enable on an untrusted network; the IAM PAT is transmitted in cleartext.
+                    type: boolean
+                    default: false
+                  caCertSecretRef:
+                    description: Optional CA bundle for verifying the Zitadel Service certificate. The certificate must cover the Service hostname. Secret must be in the install namespace.
+                    type: object
+                    required: [name, key]
+                    properties:
+                      name: {type: string, minLength: 1}
+                      key: {type: string, minLength: 1}
                   image:
                     type: string
                     default: python:3.13.7-alpine3.22
                 x-kubernetes-validations:
                   - rule: '!self.enabled || has(self.internalURL)'
                     message: instanceDiscovery.internalURL is required when enabled
+                  - rule: '!has(self.internalURL) || self.internalURL.startsWith("https://") || (has(self.allowInsecureHTTP) && self.allowInsecureHTTP)'
+                    message: instanceDiscovery requires HTTPS unless allowInsecureHTTP is explicitly enabled
               clusterName:
                 description: Name of the target cluster. Used as default for provider config refs.
                 type: string
