@@ -13,6 +13,70 @@ _ready_conditions = [
 # ==============================================================================
 
 _items = [
+    metav1alpha1.CompositionTest {
+        metadata.name = "system-api-public-key-and-instance-discovery"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "hops.ops.com.ai/v1alpha1"
+                kind = "AuthStack"
+                metadata.name = "identity"
+                spec = {
+                    clusterName = "cloud"
+                    namespace = "identity"
+                    domain = "auth.example.com"
+                    firstInstance.masterkey.secretRef.name = "masterkey"
+                    database.external.dsnSecretRef = {name = "db", key = "dsn"}
+                    systemAPIUsers = [{
+                        id = "domain-controller"
+                        publicKeySecretRef = {name = "system-public-key", key = "public.pem"}
+                        memberships = [{memberType = "System", roles = ["SYSTEM_OWNER"]}]
+                    }]
+                    instanceDiscovery = {enabled = True, internalURL = "https://identity-zitadel.identity.svc:8080", caCertSecretRef = {name = "identity-ca", key = "bundle.pem"}}
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "helm.m.crossplane.io/v1beta1"
+                    kind = "Release"
+                    metadata.name = "identity-zitadel"
+                    spec.forProvider.values = {
+                        zitadel.configmapConfig.SystemAPIUsers = {
+                            "domain-controller" = {
+                                Path = "/system-api/domain-controller/public.pem"
+                                Memberships = [{MemberType = "System", Roles = ["SYSTEM_OWNER"]}]
+                            }
+                        }
+                        extraVolumes = [{name = "system-api-78625ef78567ecc7", secret = {
+                            secretName = "system-public-key", items = [{key = "public.pem", path = "public.pem"}]
+                        }}]
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "identity-instance-metadata"
+                    spec.managementPolicies = ["Create", "Observe", "Delete"]
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "identity-instance-discovery"
+                    spec.forProvider.manifest.spec = {
+                        backoffLimit = 3
+                        template.spec.volumes = [
+                            {name = "admin-pat", secret.secretName = "iam-admin-pat"}
+                            {name = "zitadel-ca", secret = {secretName = "identity-ca", items = [{key = "bundle.pem", path = "ca.crt"}]}}
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+
     # ==========================================================================
     # Test 1: Masterkey secretRef wires masterkeySecretName
     # ==========================================================================
@@ -879,4 +943,40 @@ _items = [
     }
 ]
 
-items = _items
+# Plaintext is available only as an explicit choice for a trusted local cluster.
+_local_discovery = metav1alpha1.CompositionTest {
+    metadata.name = "local-discovery-explicit-http-and-service-override"
+    spec = {
+        compositionPath = "apis/authstacks/composition.yaml"
+        xrdPath = "apis/authstacks/definition.yaml"
+        timeoutSeconds = 60
+        validate = False
+        xr = {
+            apiVersion = "hops.ops.com.ai/v1alpha1"
+            kind = "AuthStack"
+            metadata.name = "local-auth"
+            spec = {
+                namespace = "auth"
+                domain = "auth.hops.localhost"
+                firstInstance.masterkey.secretRef.name = "masterkey"
+                database.external.dsnSecretRef = {name = "db", key = "dsn"}
+                chartValues = {fullnameOverride = "zitadel", service.port = 9090}
+                instanceDiscovery = {
+                    enabled = True
+                    internalURL = "http://zitadel.auth.svc.cluster.local:9090"
+                    allowInsecureHTTP = True
+                }
+            }
+        }
+        assertResources = [{
+            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+            kind = "Object"
+            metadata.name = "local-auth-instance-discovery"
+            spec.forProvider.manifest = {
+                metadata.namespace = "auth"
+                spec.backoffLimit = 3
+            }
+        }]
+    }
+}
+items = _items + [_local_discovery]

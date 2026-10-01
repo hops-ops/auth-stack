@@ -168,3 +168,57 @@ See [[specs/auth-stack-zitadel]] for the design and open questions.
 - Spec: `[[specs/auth-stack-zitadel]]`
 - Task: `[[tasks/auth-stack]]`
 - Upstream chart: `zitadel/zitadel` 9.34.1 (ships Zitadel v4)
+
+## System API and instance metadata
+
+AuthStack accepts optional `systemAPIUsers`: each entry has `id`,
+`publicKeySecretRef: {name, key}`, and optional `memberships` entries
+(`memberType`, `roles`, optional `aggregateId`). Keys must exist in the target
+install namespace. Only public key files are mounted; generate and persist
+private keys outside AuthStack and deliver them to provider consumers via ESO.
+No user or hostname is enabled by default. Omitting memberships grants Zitadel's
+SYSTEM_OWNER default; specify memberships explicitly when narrower access fits.
+
+Set `instanceDiscovery.enabled: true` with an explicit `internalURL` to publish
+`status.instanceId`. A retry-bounded Job reads the chart-generated IAM PAT, queries
+instance metadata, and patches only its named ConfigMap. It never mutates
+Zitadel. `firstInstance.enabled` must remain enabled for this discovery mode.
+The ConfigMap is observed without Update management so reconcile cannot erase
+the probe's result. Recreating an instance requires recreating the discovery
+Job/ConfigMap alongside it. The default discovery image is Python 3.13.7 Alpine;
+set `instanceDiscovery.image` to an approved mirror/digest when required.
+Discovery configuration (including its image and chart overrides) is an
+administrator-level interface and must not be delegated to untrusted tenants.
+
+`internalURL` must match the chart's actual Zitadel Service and configured port,
+using `<service>.<namespace>.svc` or `<service>.<namespace>.svc.cluster.local`,
+without credentials, path, query or fragment. For example:
+`https://identity-zitadel.identity.svc:8080`. The origin is validated before
+rendering the credential-consuming Job. Redirects and environment proxies are
+disabled. HTTPS verifies the certificate chain and Service hostname; configure
+server TLS through chart values and optionally set
+`caCertSecretRef: {name: zitadel-ca, key: ca.crt}` for a private CA.
+
+Only a trusted local cluster with plaintext Service traffic should set
+`allowInsecureHTTP: true`. This explicit exception sends the PAT in cleartext
+inside the cluster; browser/gateway HTTPS does not encrypt that hop. It is false
+by default and is not a cloud default. Enabling HTTPS requires the Service itself
+to support TLS, not merely TLS termination at the ingress.
+
+The pod can wait for the chart-generated PAT without a Job wall-clock deadline.
+Once started it makes at most 110 attempts (two 10-second request timeouts and a
+5-second sleep per attempt), with Kubernetes backoffLimit 3. A terminal API
+failure still requires retrying the Job after fixing the cause; waiting for a
+missing first-install Secret no longer consumes that retry budget. PAT rotation
+alone does not recreate the Job. Endpoint, image, domain, admin username, or CA
+reference changes do.
+
+These additions let consumers use provider CustomDomain/TrustedDomain resources
+without carrying instance IDs in git. Project domains and browser ingress remain
+consumer/platform responsibilities. `spec.domain` is always supplied by the
+installation: cloud examples use real domains; only local CLI templates use
+localhost. Existing installations have both features disabled unless requested.
+
+Discovery security regressions: run `make test-security` with the same Docker/
+`up` setup as render tests. It checks rejected origins and the actual Job
+transport code (TLS identity verification, no redirects, no environment proxies).

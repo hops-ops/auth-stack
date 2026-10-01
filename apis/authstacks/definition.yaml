@@ -36,6 +36,66 @@ spec:
             description: AuthStackSpec defines the desired state.
             type: object
             properties:
+              systemAPIUsers:
+                description: Optional System API users. Public keys must exist in Secrets in the Zitadel install namespace; private keys belong to API consumers.
+                type: array
+                x-kubernetes-list-type: map
+                x-kubernetes-list-map-keys: [id]
+                items:
+                  type: object
+                  required: [id, publicKeySecretRef]
+                  properties:
+                    id:
+                      type: string
+                      pattern: '^[a-z0-9][a-z0-9-]*$'
+                      maxLength: 63
+                    publicKeySecretRef:
+                      type: object
+                      required: [name, key]
+                      properties:
+                        name: {type: string, minLength: 1}
+                        key: {type: string, minLength: 1}
+                    memberships:
+                      description: Explicit System API memberships; defaults to SYSTEM_OWNER when omitted (Zitadel behavior).
+                      type: array
+                      items:
+                        type: object
+                        required: [memberType, roles]
+                        properties:
+                          memberType: {type: string, enum: [System, IAM, Organization]}
+                          aggregateId: {type: string}
+                          roles:
+                            type: array
+                            minItems: 1
+                            items: {type: string}
+              instanceDiscovery:
+                description: Opt-in read-only discovery of the bootstrapped instance ID. Uses the chart-generated IAM admin PAT and publishes only non-secret metadata.
+                type: object
+                properties:
+                  enabled: {type: boolean, default: false}
+                  internalURL:
+                    description: Origin of this stack's Zitadel Service (HTTPS by default), with explicit service port and no path. Host must match the rendered chart Service in the install namespace.
+                    type: string
+                    pattern: '^https?://[a-z0-9-]+[.][a-z0-9-]+[.]svc([.]cluster[.]local)?:[0-9]+$'
+                  allowInsecureHTTP:
+                    description: Explicit opt-in for trusted local clusters with plaintext Service traffic. Never enable on an untrusted network; the IAM PAT is transmitted in cleartext.
+                    type: boolean
+                    default: false
+                  caCertSecretRef:
+                    description: Optional CA bundle for verifying the Zitadel Service certificate. The certificate must cover the Service hostname. Secret must be in the install namespace.
+                    type: object
+                    required: [name, key]
+                    properties:
+                      name: {type: string, minLength: 1}
+                      key: {type: string, minLength: 1}
+                  image:
+                    type: string
+                    default: python:3.13.7-alpine3.22
+                x-kubernetes-validations:
+                  - rule: '!self.enabled || has(self.internalURL)'
+                    message: instanceDiscovery.internalURL is required when enabled
+                  - rule: '!has(self.internalURL) || self.internalURL.startsWith("https://") || (has(self.allowInsecureHTTP) && self.allowInsecureHTTP)'
+                    message: instanceDiscovery requires HTTPS unless allowInsecureHTTP is explicitly enabled
               clusterName:
                 description: Name of the target cluster. Used as default for provider config refs.
                 type: string
@@ -478,6 +538,9 @@ spec:
             description: AuthStackStatus surfaces the OIDC contract and chart-managed bootstrap secret refs.
             type: object
             properties:
+              instanceId:
+                description: Instance ID observed through the Zitadel API, populated when instanceDiscovery is enabled.
+                type: string
               ready:
                 description: Overall readiness of the auth stack.
                 type: boolean

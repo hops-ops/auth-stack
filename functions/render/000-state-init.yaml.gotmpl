@@ -219,6 +219,8 @@
   "labels" $labels
   "helmProviderConfigRef" $helmProviderConfigRef
   "kubernetesProviderConfigRef" $k8sProviderConfigRef
+  "systemAPIUsers" ($spec.systemAPIUsers | default list)
+  "instanceDiscovery" ($spec.instanceDiscovery | default dict)
   "domain" $domain
   "externalSecure" $externalSecure
   "chartVersion" $chartVersion

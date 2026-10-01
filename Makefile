@@ -129,6 +129,11 @@ validate\:%:
 test:
 	up test run $(RENDER_TESTS)
 
+# Includes rejection cases that CompositionTest cannot express.
+.PHONY: test-security
+test-security:
+	python3 -m unittest discover -s tests/security -v
+
 e2e:
 	up test run $(E2E_TESTS) --e2e
 
