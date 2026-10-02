@@ -28,6 +28,7 @@ EXAMPLES := \
     examples/authstacks/standard.yaml:: \
     examples/authstacks/local-colima.yaml:: \
     examples/authstacks/with-smtp.yaml:: \
+    examples/authstacks/with-instance.yaml:: \
     examples/machineusers/minimal.yaml:: \
     examples/machineusers/with-pat.yaml:: \
     examples/machineusers/with-pat-push.yaml:: \
@@ -40,75 +41,37 @@ EXAMPLES := \
     examples/grants/cross-org.yaml:: \
     examples/grants/cross-org.yaml::tests/test-grant/observed/cross-org-iter2.yaml
 
-# Render all examples (parallel execution, output shown per-job when complete)
+# Render serially: up updates shared project metadata/schema caches during build.
 render\:all:
-	@tmpdir=$$(mktemp -d); \
-	pids=""; \
+	@set -e; \
 	for entry in $(EXAMPLES); do \
-		example=$${entry%%::*}; \
-		observed=$${entry#*::}; \
+		example=$${entry%%::*}; observed=$${entry#*::}; \
 		api_dir=$$(echo "$$example" | awk -F/ '{print "apis/" $$2}'); \
-		composition="$$api_dir/composition.yaml"; \
-		definition="$$api_dir/definition.yaml"; \
-		outfile="$$tmpdir/$$(echo $$entry | tr '/:' '__')"; \
-		( \
-			if [ -n "$$observed" ]; then \
-				echo "=== Rendering $$example with observed-resources $$observed ==="; \
-				up composition render --xrd=$$definition $$composition $$example --observed-resources=$$observed; \
-			else \
-				echo "=== Rendering $$example (api=$$api_dir) ==="; \
-				up composition render --xrd=$$definition $$composition $$example; \
-			fi; \
-			echo "" \
-		) > "$$outfile" 2>&1 & \
-		pids="$$pids $$!:$$outfile"; \
-	done; \
-	failed=0; \
-	for pair in $$pids; do \
-		pid=$${pair%%:*}; \
-		outfile=$${pair#*:}; \
-		if ! wait $$pid; then failed=1; fi; \
-		cat "$$outfile"; \
-	done; \
-	rm -rf "$$tmpdir"; \
-	exit $$failed
+		echo "Rendering $$example"; \
+		if [ -n "$$observed" ]; then \
+			up composition render --xrd=$$api_dir/definition.yaml $$api_dir/composition.yaml $$example --observed-resources=$$observed; \
+		else \
+			up composition render --xrd=$$api_dir/definition.yaml $$api_dir/composition.yaml $$example; \
+		fi; \
+	done
 
-# Validate all examples (parallel execution, output shown per-job when complete)
-validate\:all:
-	@tmpdir=$$(mktemp -d); \
-	pids=""; \
+# Include dependency metadata and all XRDs when loading validation schemas.
+.PHONY: generate-configuration
+generate-configuration:
+	hops validate generate-configuration --path . --api-path $(XRD_DIR) --no-gitignore-update
+
+validate\:all: generate-configuration
+	@set -e -o pipefail; \
 	for entry in $(EXAMPLES); do \
-		example=$${entry%%::*}; \
-		observed=$${entry#*::}; \
+		example=$${entry%%::*}; observed=$${entry#*::}; \
 		api_dir=$$(echo "$$example" | awk -F/ '{print "apis/" $$2}'); \
-		composition="$$api_dir/composition.yaml"; \
-		definition="$$api_dir/definition.yaml"; \
-		outfile="$$tmpdir/$$(echo $$entry | tr '/:' '__')"; \
-		( \
-			if [ -n "$$observed" ]; then \
-				echo "=== Validating $$example with observed-resources $$observed ==="; \
-				up composition render --xrd=$$definition $$composition $$example \
-					--observed-resources=$$observed --include-full-xr --quiet | \
-					crossplane resource validate $$api_dir --error-on-missing-schemas -; \
-			else \
-				echo "=== Validating $$example (api=$$api_dir) ==="; \
-				up composition render --xrd=$$definition $$composition $$example \
-					--include-full-xr --quiet | \
-					crossplane resource validate $$api_dir --error-on-missing-schemas -; \
-			fi; \
-			echo "" \
-		) > "$$outfile" 2>&1 & \
-		pids="$$pids $$!:$$outfile"; \
-	done; \
-	failed=0; \
-	for pair in $$pids; do \
-		pid=$${pair%%:*}; \
-		outfile=$${pair#*:}; \
-		if ! wait $$pid; then failed=1; fi; \
-		cat "$$outfile"; \
-	done; \
-	rm -rf "$$tmpdir"; \
-	exit $$failed
+		echo "Validating $$example"; \
+		if [ -n "$$observed" ]; then \
+			up composition render --xrd=$$api_dir/definition.yaml $$api_dir/composition.yaml $$example --observed-resources=$$observed --include-full-xr --quiet; \
+		else \
+			up composition render --xrd=$$api_dir/definition.yaml $$api_dir/composition.yaml $$example --include-full-xr --quiet; \
+		fi | crossplane resource validate apis --error-on-missing-schemas -; \
+	done
 
 # Shorthand aliases
 .PHONY: clean build test e2e publish render validate
@@ -129,7 +92,7 @@ validate\:%:
 test:
 	up test run $(RENDER_TESTS)
 
-# Includes rejection cases that CompositionTest cannot express.
+# Native observation readiness and migration regressions; requires PyYAML.
 .PHONY: test-security
 test-security:
 	python3 -m unittest discover -s tests/security -v

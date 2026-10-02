@@ -149,11 +149,19 @@
   )
 ) }}
 
-# The ConfigMap is written by a read-only metadata probe, not a desired input.
-{{- $discoveryEntry := get $observed "instance-metadata" | default dict }}
-{{- $instanceId := dig "resource" "status" "atProvider" "manifest" "data" "instanceId" "" $discoveryEntry }}
+# Publish only verified non-secret provider metadata, never the old Job cache.
+{{- $instance := dig "instance" "resource" dict $observed }}
+{{- $instanceReady := false }}
+{{- $instanceSynced := false }}
+{{- range (dig "status" "conditions" list $instance) }}
+  {{- if and (eq .type "Ready") (eq .status "True") }}{{- $instanceReady = true }}{{- end }}
+  {{- if and (eq .type "Synced") (eq .status "True") (ge (int (.observedGeneration | default 0)) (int (dig "metadata" "generation" 0 $instance))) }}{{- $instanceSynced = true }}{{- end }}
+{{- end }}
+{{- $instanceId := "" }}
+{{- if and $instanceReady $instanceSynced (not (dig "metadata" "deletionTimestamp" "" $instance)) }}
+  {{- $instanceId = dig "status" "atProvider" "id" "" $instance }}
+{{- end }}
 {{- $_ := set $state.status "instanceId" $instanceId }}
-
 {{- if $state.instanceDiscovery.enabled }}
-{{- $_ := set $state.status "ready" (and $relReady (ne $instanceId "")) }}
+  {{- $_ := set $state.status "ready" (and $relReady (ne $instanceId "")) }}
 {{- end }}
