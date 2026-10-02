@@ -83,11 +83,11 @@ render\:%:
 	@example="examples/authstacks/$*.yaml"; \
 	up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example
 
-validate\:%:
-	@example="examples/authstacks/$*.yaml"; \
+validate\:%: generate-configuration
+	@set -e -o pipefail; example="examples/authstacks/$*.yaml"; \
 	up composition render --xrd=$(DEFINITION) $(COMPOSITION) $$example \
 		--include-full-xr --quiet | \
-		crossplane resource validate $(XRD_DIR) --error-on-missing-schemas -
+		crossplane resource validate apis --error-on-missing-schemas -
 
 test:
 	up test run $(RENDER_TESTS)
