@@ -29,6 +29,8 @@ jobs:
         [
           { "example": "examples/authstacks/minimal.yaml",      "api_path": "apis/authstacks" },
           { "example": "examples/authstacks/standard.yaml",     "api_path": "apis/authstacks" },
+          { "example": "examples/authstacks/with-smtp.yaml", "api_path": "apis/authstacks" },
+          { "example": "examples/authstacks/with-instance.yaml", "api_path": "apis/authstacks" },
           { "example": "examples/authstacks/local-colima.yaml", "api_path": "apis/authstacks" },
           { "example": "examples/machineusers/minimal.yaml",      "api_path": "apis/machineusers" },
           { "example": "examples/machineusers/with-pat.yaml",     "api_path": "apis/machineusers" },
@@ -36,13 +38,29 @@ jobs:
           { "example": "examples/humanusers/explicit-org.yaml",   "api_path": "apis/humanusers" },
           { "example": "examples/humanusers/with-org-ref.yaml",   "api_path": "apis/humanusers" },
           { "example": "examples/oidcclients/storybook-preview.yaml", "api_path": "apis/oidcclients" },
+          { "example": "examples/oidcclients/storybook-preview.yaml", "api_path": "apis/oidcclients", "observed_resources": "tests/test-oidcclient/observed/ready.yaml" },
+          { "example": "examples/grants/referenced-same-org.yaml", "api_path": "apis/grants" },
           { "example": "examples/grants/same-org.yaml",            "api_path": "apis/grants" },
-          { "example": "examples/grants/cross-org.yaml",           "api_path": "apis/grants" }
+          { "example": "examples/grants/cross-org.yaml",           "api_path": "apis/grants" },
+          { "example": "examples/grants/cross-org.yaml", "api_path": "apis/grants", "observed_resources": "tests/test-grant/observed/cross-org-iter2.yaml" }
         ]
       error_on_missing_schemas: true
 
   test:
     uses: hops-ops/workflows-crossplane/.github/workflows/test.yaml@v3.2.0
+
+  instance-observation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: upbound/action-up@v1.2.0
+        with:
+          skip-login: true
+      - uses: upbound/action-up-project@v1.2.0
+        with:
+          skip-login-check: true
+      - run: python3 -m pip install PyYAML==6.0.3
+      - run: make test-security
 
   e2e:
     uses: hops-ops/workflows-crossplane/.github/workflows/e2e.yaml@v3.2.0
@@ -52,6 +70,7 @@ jobs:
     needs:
       - validate
       - test
+      - instance-observation
       - e2e
     uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.22.3
     secrets:

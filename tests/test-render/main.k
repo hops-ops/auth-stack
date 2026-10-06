@@ -35,7 +35,7 @@ _items = [
                         publicKeySecretRef = {name = "system-public-key", key = "public.pem"}
                         memberships = [{memberType = "System", roles = ["SYSTEM_OWNER"]}]
                     }]
-                    instanceDiscovery = {enabled = True, internalURL = "https://identity-zitadel.identity.svc:8080", caCertSecretRef = {name = "identity-ca", key = "bundle.pem"}}
+                    instanceDiscovery = {enabled = True, providerConfigRef = {name = "admin", kind = "ClusterProviderConfig"}}
                 }
             }
             assertResources = [
@@ -56,21 +56,12 @@ _items = [
                     }
                 }
                 {
-                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-                    kind = "Object"
-                    metadata.name = "identity-instance-metadata"
-                    spec.managementPolicies = ["Create", "Observe", "Delete"]
-                }
-                {
-                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-                    kind = "Object"
-                    metadata.name = "identity-instance-discovery"
-                    spec.forProvider.manifest.spec = {
-                        backoffLimit = 3
-                        template.spec.volumes = [
-                            {name = "admin-pat", secret.secretName = "iam-admin-pat"}
-                            {name = "zitadel-ca", secret = {secretName = "identity-ca", items = [{key = "bundle.pem", path = "ca.crt"}]}}
-                        ]
+                    apiVersion = "instance.zitadel.m.crossplane.io/v1alpha1"
+                    kind = "Instance"
+                    metadata.name = "identity-instance"
+                    spec = {
+                        managementPolicies = ["Observe"]
+                        providerConfigRef = {name = "admin", kind = "ClusterProviderConfig"}
                     }
                 }
             ]
@@ -943,40 +934,4 @@ _items = [
     }
 ]
 
-# Plaintext is available only as an explicit choice for a trusted local cluster.
-_local_discovery = metav1alpha1.CompositionTest {
-    metadata.name = "local-discovery-explicit-http-and-service-override"
-    spec = {
-        compositionPath = "apis/authstacks/composition.yaml"
-        xrdPath = "apis/authstacks/definition.yaml"
-        timeoutSeconds = 60
-        validate = False
-        xr = {
-            apiVersion = "hops.ops.com.ai/v1alpha1"
-            kind = "AuthStack"
-            metadata.name = "local-auth"
-            spec = {
-                namespace = "auth"
-                domain = "auth.hops.localhost"
-                firstInstance.masterkey.secretRef.name = "masterkey"
-                database.external.dsnSecretRef = {name = "db", key = "dsn"}
-                chartValues = {fullnameOverride = "zitadel", service.port = 9090}
-                instanceDiscovery = {
-                    enabled = True
-                    internalURL = "http://zitadel.auth.svc.cluster.local:9090"
-                    allowInsecureHTTP = True
-                }
-            }
-        }
-        assertResources = [{
-            apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
-            kind = "Object"
-            metadata.name = "local-auth-instance-discovery"
-            spec.forProvider.manifest = {
-                metadata.namespace = "auth"
-                spec.backoffLimit = 3
-            }
-        }]
-    }
-}
-items = _items + [_local_discovery]
+items = _items

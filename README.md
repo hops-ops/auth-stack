@@ -179,46 +179,66 @@ private keys outside AuthStack and deliver them to provider consumers via ESO.
 No user or hostname is enabled by default. Omitting memberships grants Zitadel's
 SYSTEM_OWNER default; specify memberships explicitly when narrower access fits.
 
-Set `instanceDiscovery.enabled: true` with an explicit `internalURL` to publish
-`status.instanceId`. A retry-bounded Job reads the chart-generated IAM PAT, queries
-instance metadata, and patches only its named ConfigMap. It never mutates
-Zitadel. `firstInstance.enabled` must remain enabled for this discovery mode.
-The ConfigMap is observed without Update management so reconcile cannot erase
-the probe's result. Recreating an instance requires recreating the discovery
-Job/ConfigMap alongside it. The default discovery image is Python 3.13.7 Alpine;
-set `instanceDiscovery.image` to an approved mirror/digest when required.
-Discovery configuration (including its image and chart overrides) is an
-administrator-level interface and must not be delegated to untrusted tenants.
+Set `instanceDiscovery.enabled: true` and select an existing Zitadel
+ProviderConfig. AuthStack composes a namespaced, read-only `Instance` using
+provider-upjet-zitadel **v0.3.0 or newer**:
 
-`internalURL` must match the chart's actual Zitadel Service and configured port,
-using `<service>.<namespace>.svc` or `<service>.<namespace>.svc.cluster.local`,
-without credentials, path, query or fragment. For example:
-`https://identity-zitadel.identity.svc:8080`. The origin is validated before
-rendering the credential-consuming Job. Redirects and environment proxies are
-disabled. HTTPS verifies the certificate chain and Service hostname; configure
-server TLS through chart values and optionally set
-`caCertSecretRef: {name: zitadel-ca, key: ca.crt}` for a private CA.
+```yaml
+spec:
+  instanceDiscovery:
+    enabled: true
+    providerConfigRef:
+      name: zitadel-admin
+      kind: ClusterProviderConfig
+```
 
-Only a trusted local cluster with plaintext Service traffic should set
-`allowInsecureHTTP: true`. This explicit exception sends the PAT in cleartext
-inside the cluster; browser/gateway HTTPS does not encrypt that hop. It is false
-by default and is not a cloud default. Enabling HTTPS requires the Service itself
-to support TLS, not merely TLS termination at the ingress.
+The ProviderConfig owns authentication, endpoint, TLS and instance headers. It
+must target the instance installed by this AuthStack; AuthStack cannot verify
+that an arbitrary consumer-owned endpoint belongs to its Helm release. Provision
+credentials with ESO, and publish chart-generated PATs through PushSecret before
+waiting for native observation. For first install, wait for the composed Helm
+Release, establish the ProviderConfig, then wait for AuthStack readiness. Do not
+wait for AuthStack readiness before creating its observer's credentials.
 
-The pod can wait for the chart-generated PAT without a Job wall-clock deadline.
-Once started it makes at most 110 attempts (two 10-second request timeouts and a
-5-second sleep per attempt), with Kubernetes backoffLimit 3. A terminal API
-failure still requires retrying the Job after fixing the cause; waiting for a
-missing first-install Secret no longer consumes that retry budget. PAT rotation
-alone does not recreate the Job. Endpoint, image, domain, admin username, or CA
-reference changes do.
+Successful, current-generation observation publishes `status.instanceId` and
+`status.instanceRef: {name, namespace}`. Domain resources can use the named
+observer directly, without copying the ID or importing an external name:
 
-These additions let consumers use provider CustomDomain/TrustedDomain resources
-without carrying instance IDs in git. Project domains and browser ingress remain
-consumer/platform responsibilities. `spec.domain` is always supplied by the
-installation: cloud examples use real domains; only local CLI templates use
-localhost. Existing installations have both features disabled unless requested.
+```yaml
+apiVersion: instance.zitadel.m.crossplane.io/v1alpha1
+kind: TrustedDomain
+metadata:
+  name: browser
+  namespace: preview
+spec:
+  forProvider:
+    instanceIdRef:
+      name: identity-instance  # AuthStack metadata.name + "-instance"
+      namespace: platform     # AuthStack namespace
+      policy: {resolve: Always}
+    domain: preview.example.com
+  providerConfigRef:
+    name: zitadel-admin
+    kind: ClusterProviderConfig
+```
 
-Discovery security regressions: run `make test-security` with the same Docker/
-`up` setup as render tests. It checks rejected origins and the actual Job
-transport code (TLS identity verification, no redirects, no environment proxies).
+`instanceIdSelector` is also supported by the provider; use a unique label match
+when consumers should discover the observer rather than name it explicitly.
+The observer retries API failures and reads rotated credentials on reconciliation.
+It binds the first observed ID and refuses a different ID until deliberately
+recreated. Deleting it does not delete Zitadel; Helm still owns that lifecycle.
+A Usage keeps the Helm release available until the observer has been deleted.
+
+### Migrating existing instance discovery
+
+This changes only the **opt-in discovery API** introduced previously. Replace
+`internalURL`, `allowInsecureHTTP`, `caCertSecretRef` and `image` with
+`providerConfigRef`. Configure transport in that ProviderConfig instead; an
+old discovery configuration without the new reference is rejected. The Job,
+ConfigMap, ServiceAccount and RBAC are removed by composition reconciliation.
+`enabled` and `status.instanceId` remain; `status.instanceRef` is additive.
+AuthStack consumers with discovery disabled retain their installation behavior.
+No localhost, plaintext transport or secret backend is defaulted by this API.
+The package dependency now requires provider v0.3.0+, so upgrade that provider
+before applying this configuration. Recreate only the observer when intentionally
+replacing an installed instance; preserve Helm/database resources otherwise.
