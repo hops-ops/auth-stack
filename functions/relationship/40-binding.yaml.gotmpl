@@ -1,0 +1,53 @@
+# code: language=yaml
+{{- if $state.binding.render }}
+---
+apiVersion: {{ $state.nativeAPI }}
+kind: {{ $state.kind }}
+metadata:
+  name: {{ $state.binding.name }}
+  namespace: {{ $state.namespace }}
+  labels: {{ $state.spec.effective.labels | toJson }}
+  annotations:
+    {{ setResourceNameAnnotation "binding" }}
+    gotemplating.fn.crossplane.io/ready: {{ ternary "True" "False" $state.status.ready | quote }}
+    {{- if $state.binding.externalName }}
+    crossplane.io/external-name: {{ $state.binding.externalName | quote }}
+    {{- end }}
+spec: {{ $state.binding.spec | toJson }}
+{{- end }}
+{{- range $key, $ref := $state.refs }}
+  {{- $usageKey := printf "usage-%s" $key }}
+  {{- $oldUsage := getComposedResource $ $usageKey | default dict }}
+  {{- $canCreate := and $state.status.referencesResolved $state.observed.binding.ready (get $state.observed $key).ready }}
+  {{- if or $canCreate (not (empty $oldUsage)) }}
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: {{ printf "%s-delete-%s-before-%s" $state.name (lower $state.kind) (lower $key) }}
+  namespace: {{ $state.namespace }}
+  labels: {{ $state.spec.effective.labels | toJson }}
+  annotations:
+    {{ setResourceNameAnnotation $usageKey }}
+    gotemplating.fn.crossplane.io/ready: "True"
+spec:
+  {{- if not (empty $oldUsage) }}
+  {{- /* Keep an established deletion lock during temporary readiness loss. */}}
+  {{- $oldUsage.spec | toYaml | nindent 2 }}
+  {{- else }}
+  replayDeletion: true
+  of:
+    apiVersion: {{ $ref.apiVersion }}
+    kind: {{ $ref.kind }}
+    resourceRef:
+      name: {{ $ref.name | quote }}
+      namespace: {{ $ref.namespace | quote }}
+  by:
+    apiVersion: {{ $state.nativeAPI }}
+    kind: {{ $state.kind }}
+    resourceRef:
+      name: {{ $state.binding.name | quote }}
+      namespace: {{ $state.namespace | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

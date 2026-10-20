@@ -1,0 +1,97 @@
+# code: language=yaml
+{{- $eff := $state.spec.effective }}
+{{- $fp := deepCopy $eff.forProvider }}
+{{- /* Only the XR's typed references may select assignment identities. */}}
+{{- range $key := list "userIdRef" "userIdSelector" "projectIdRef" "projectIdSelector" "orgIdRef" "orgIdSelector" }}
+  {{- $_ := unset $fp $key }}
+{{- end }}
+{{- $resolved := true }}
+{{- range $key, $obs := $state.observed }}
+  {{- if ne $key "binding" }}
+    {{- if or (empty $obs.id) $obs.deleting }}{{- $resolved = false }}{{- end }}
+  {{- end }}
+{{- end }}
+{{- $_ := set $fp "userId" $state.observed.subject.id }}
+{{- if eq $state.kind "Authorization" }}
+  {{- $_ := set $fp "projectId" $state.observed.project.id }}
+  {{- $_ := set $fp "orgId" $state.observed.organization.id }}
+  {{- $_ := set $fp "roleKeys" $eff.roles }}
+  {{- if hasKey $state.refs "projectGrant" }}
+    {{- $grant := $state.observed.projectGrant.atProvider }}
+    {{- if or (ne ($grant.projectId | default "") $state.observed.project.id) (ne ($grant.grantedOrgId | default "") $state.observed.organization.id) }}
+      {{- $resolved = false }}
+    {{- end }}
+  {{- end }}
+{{- else }}
+  {{- /* The v2 administrator API takes a union; never leak stale target
+        fields from pass-through options into another scope. */}}
+  {{- $_ := unset $fp "orgId" }}
+  {{- $_ := unset $fp "projectId" }}
+  {{- $_ := set $fp "roles" $eff.roles }}
+  {{- $scope := "instance" }}
+  {{- if hasKey $state.refs "organization" }}
+    {{- $scope = "organization" }}
+    {{- $_ := set $fp "orgId" $state.observed.organization.id }}
+  {{- else if hasKey $state.refs "project" }}
+    {{- $scope = "project" }}
+    {{- $_ := set $fp "projectId" $state.observed.project.id }}
+  {{- else if hasKey $state.refs "projectGrant" }}
+    {{- $scope = "project_grant" }}
+    {{- $grant := $state.observed.projectGrant.atProvider }}
+    {{- $_ := set $fp "projectId" ($grant.projectId | default "") }}
+    {{- $_ := set $fp "orgId" ($grant.grantedOrgId | default "") }}
+    {{- if or (empty $fp.projectId) (empty $fp.orgId) }}{{- $resolved = false }}{{- end }}
+  {{- end }}
+  {{- $_ := set $fp "resourceType" $scope }}
+{{- end }}
+{{- $reason := "Resolved" }}
+{{- $message := "All referenced native identities are resolved." }}
+{{- if not $resolved }}
+  {{- $reason = "WaitingForReferences" }}
+  {{- $message = "A reference has no observed ID, is deleting, or the project grant does not match the requested project and organization. Existing binding is retained without create/update operations." }}
+{{- end }}
+{{- $old := $state.observed.binding.resource }}
+{{- $oldSpec := $old.spec | default dict }}
+{{- $oldFP := $oldSpec.forProvider | default dict }}
+{{- if and $resolved (not (empty $old)) }}
+  {{- range $key := list "userId" "projectId" "orgId" "resourceType" }}
+    {{- if ne (get $fp $key | default "") (get $oldFP $key | default "") }}
+      {{- $resolved = false }}
+      {{- $reason = "IdentityChanged" }}
+      {{- $message = "A referenced resource now has a different remote identity. The existing binding is retained without create/update operations; create another XR for reassignment." }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- $remote := ($old.status | default dict).atProvider | default dict }}
+{{- $identityVerified := not (empty $remote.id) }}
+{{- $cachedIdentitySafe := not (empty $remote.id) }}
+{{- range $key := list "userId" "projectId" "orgId" "resourceType" }}
+  {{- if ne (get $fp $key | default "") (get $remote $key | default "") }}{{- $identityVerified = false }}{{- end }}
+  {{- if ne (get $oldFP $key | default "") (get $remote $key | default "") }}{{- $cachedIdentitySafe = false }}{{- end }}
+{{- end }}
+{{- $importPending := and (not (empty $eff.externalName)) (not $cachedIdentitySafe) }}
+{{- $remoteMismatch := and (not (empty $remote.id)) (not $cachedIdentitySafe) }}
+{{- $holdWrites := or (not $resolved) $importPending $remoteMismatch }}
+{{- $identityReason := "WaitingForObservation" }}
+{{- if $identityVerified }}{{- $identityReason = "MatchesReferences" }}{{- end }}
+{{- if $remoteMismatch }}{{- $identityReason = "BindingIdentityMismatch" }}{{- end }}
+{{- $nativeSpec := dict "forProvider" $fp "providerConfigRef" $eff.providerConfigRef "managementPolicies" $eff.managementPolicies }}
+{{- $name := $eff.resourceName }}
+{{- $externalName := $eff.externalName }}
+{{- if and $holdWrites (not (empty $old)) }}
+  {{- $nativeSpec = deepCopy $oldSpec }}
+  {{- $name = $old.metadata.name }}
+  {{- $externalName = index ($old.metadata.annotations | default dict) "crossplane.io/external-name" | default "" }}
+  {{- /* Preserve explicit Delete permission for intentional XR teardown, but
+        suspend creates and updates from cached reference values. */}}
+  {{- $policies := $nativeSpec.managementPolicies | default list }}
+  {{- $retainedPolicies := list }}
+  {{- if or (has "*" $policies) (has "Observe" $policies) }}{{- $retainedPolicies = append $retainedPolicies "Observe" }}{{- end }}
+  {{- if and (not $remoteMismatch) (not $importPending) (or (has "*" $policies) (has "Delete" $policies)) }}{{- $retainedPolicies = append $retainedPolicies "Delete" }}{{- end }}
+  {{- $_ := set $nativeSpec "managementPolicies" $retainedPolicies }}
+{{- end }}
+{{- if and $holdWrites (empty $old) }}
+  {{- $_ := set $nativeSpec "managementPolicies" (list "Observe") }}
+{{- end }}
+{{- $_ := set $state "binding" (dict "render" (or $resolved (not (empty $old))) "spec" $nativeSpec "name" $name "externalName" $externalName) }}
+{{- $_ := set $state "status" (dict "referencesResolved" $resolved "reason" $reason "message" $message "identityVerified" $identityVerified "identityReason" $identityReason "ready" (and $resolved $identityVerified (not $remoteMismatch) $state.observed.binding.ready) "bindingId" $state.observed.binding.id) }}

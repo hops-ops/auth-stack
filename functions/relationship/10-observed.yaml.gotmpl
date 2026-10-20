@@ -1,0 +1,31 @@
+# code: language=yaml
+{{- range $key, $ref := $state.refs }}
+  {{- $found := dict }}
+  {{- $resources := get ($.context | default dict) "apiextensions.crossplane.io/extra-resources" | default dict }}
+  {{- $items := (get $resources $key | default dict).items | default list }}
+  {{- range $items }}
+    {{- $obj := .resource | default . }}
+    {{- if and (eq ($obj.metadata.name | default "") $ref.name) (eq ($obj.metadata.namespace | default "") $ref.namespace) (eq ($obj.kind | default "") $ref.kind) (eq ($obj.apiVersion | default "") $ref.apiVersion) }}
+      {{- $found = $obj }}
+    {{- end }}
+  {{- end }}
+  {{- $status := $found.status | default dict }}
+  {{- $at := $status.atProvider | default dict }}
+  {{- $ready := false }}
+  {{- range ($status.conditions | default list) }}
+    {{- if and (eq .type "Ready") (eq .status "True") }}{{- $ready = true }}{{- end }}
+  {{- end }}
+  {{- $_ := set $state.observed $key (dict "resource" $found "atProvider" $at "id" ($at.id | default "") "ready" $ready "deleting" (not (empty (($found.metadata | default dict).deletionTimestamp)))) }}
+{{- end }}
+{{- $native := getComposedResource . "binding" | default dict }}
+{{- $status := $native.status | default dict }}
+{{- $at := $status.atProvider | default dict }}
+{{- $ready := false }}
+{{- $synced := false }}
+{{- $metadata := $native.metadata | default dict }}
+{{- range ($status.conditions | default list) }}
+  {{- $current := or (not (hasKey . "observedGeneration")) (eq (int64 (.observedGeneration | default 0)) (int64 ($metadata.generation | default 0))) }}
+  {{- if and $current (eq .type "Ready") (eq .status "True") }}{{- $ready = true }}{{- end }}
+  {{- if and $current (eq .type "Synced") (eq .status "True") }}{{- $synced = true }}{{- end }}
+{{- end }}
+{{- $_ := set $state.observed "binding" (dict "resource" $native "id" ($at.id | default "") "ready" (and $ready $synced (not (empty $at.id)) (empty $metadata.deletionTimestamp))) }}

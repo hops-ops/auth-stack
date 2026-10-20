@@ -242,3 +242,74 @@ No localhost, plaintext transport or secret backend is defaulted by this API.
 The package dependency now requires provider v0.3.0+, so upgrade that provider
 before applying this configuration. Recreate only the observer when intentionally
 replacing an installed instance; preserve Helm/database resources otherwise.
+
+## Native identities and relationship XRs (release pending)
+
+Use native `Organization`, `HumanUser`, `MachineUser`, `ProjectV2` and
+`Application` resources for identities and registrations. The new
+`Authorization` and `Administrator` XRs solve the provider's polymorphic
+human/machine user reference limitation. They own one assignment and its
+complete role set. They never create users, organizations, projects or shared
+project grants. Application environments own those declarations and credential
+exports; preview environments receive them through application promotion.
+
+These additions depend on the [Crossplane provider PR70](https://github.com/crossplane-contrib/provider-upjet-zitadel/pull/70) and
+[Terraform provider PR474](https://github.com/zitadel/terraform-provider-zitadel/pull/474).
+**Provider v0.3.0 does not implement their native resource types.** This change
+must remain a draft until the upstream provider is released, the dependency
+constraint is advanced and full validation passes against that release.
+
+Start with [Authorization](examples/authorizations/referenced.yaml) for application
+role keys, or [Administrator](examples/administrators/referenced.yaml) for
+administrative roles. Administrator requires exactly one explicit target:
+`organizationRef`, `projectRef`, `projectGrantRef`, or `instance: true`. Instance
+scope has no default. Project-grant targets resolve the project and grantee
+organization from an environment-owned native Grant. Roles remain subject to
+Zitadel's validation for the selected target scope.
+
+References default to the XR namespace and accept native provider resources.
+An explicit `namespace` requires `allowCrossNamespaceReferences: true`. This is
+an opt-in declaration, not a security boundary: restrict XR and ProviderConfig
+access using RBAC. All references and the ProviderConfig must address the same
+Zitadel instance. For Authorization, `organizationRef` identifies the
+organization where the authorization is granted; it is independent of the user's
+home organization. A `projectGrantRef` can pin and protect an existing delegation;
+its observed project and grantee organization must match the assignment.
+
+An observed reference ID is sufficient to keep rendering during a temporary
+Ready failure. A missing/deleting reference or changed remote identity retains
+the existing native object and external ID, suspends Create/Update/LateInitialize,
+and sets `ReferencesResolved=False` and `Ready=False`. Explicit Observe and Delete
+permissions are preserved; intentional teardown can still remove the assignment
+if Delete was enabled. Existing Usage locks remain during readiness loss. New
+Usages wait for ready resources and protect referenced principals/targets until
+the native assignment is removed. The owner of shared delegation is responsible
+for protecting its own project/organization dependencies.
+
+To adopt an existing assignment, set `spec.binding.externalName` and start with
+`managementPolicies: [Observe]`. Authorization imports by its existing assignment
+ID. Imported assignments automatically remain Observe-only until their observed
+user/target identity matches the resolved references. A mismatch disables
+delete as well, preserving the unrelated remote assignment. Administrator imports by `user:organization:org`, `user:project:project`,
+`user:project_grant:project:grantee-org`, or `user:instance` (percent-encode colons
+in IDs). `binding.resourceName` controls the stable native Kubernetes name.
+Preserve the existing remote assignment while removing its previous declarative
+owner without Delete; confirm the new observer reports the same identity and
+roles before enabling writes. Never let two owners reconcile one complete role
+set simultaneously. References and provider selection are immutable; identity
+replacement requires a separate XR/adoption step.
+
+The old HumanUser, MachineUser, Grant and OIDCClient XRDs remain packaged for
+compatibility. Migrate the nine local Grant instances by importing their native
+user-grant IDs into Authorization, with environment-owned delegation declared
+separately. Migrate the two active EKS OIDCClient registrations to native client
+resources using their current application IDs and Secret contracts. Do not
+remove these XRDs or the terminating preview objects as part of introducing the
+new APIs. PAT v2 and the Actions v2 groups-claim webhook migration are separate
+provider/runtime work.
+
+The relationship regression suite is included in `make test-security`. It checks
+both subject kinds, all administrator targets, cross-namespace references,
+missing/replaced references, current readiness, import and deletion locks. Local
+render tests change no cluster resources. Live e2e/adoption verification remains
+a release prerequisite.

@@ -1,0 +1,32 @@
+apiVersion: internalpermission.zitadel.m.crossplane.io/v1alpha1
+kind: Administrator
+metadata:
+  name: reader-administrator
+  namespace: app
+  annotations:
+    crossplane.io/composition-resource-name: binding
+    crossplane.io/external-name: user-id:organization:org-id
+spec:
+  providerConfigRef:
+    name: zitadel
+    kind: ProviderConfig
+  managementPolicies:
+  - '*'
+  forProvider:
+    userId: user-id
+    orgId: org-id
+    resourceType: organization
+    roles: &id001
+    - ORG_USER_MANAGER
+status:
+  atProvider:
+    id: user-id:organization:org-id
+    userId: user-id
+    orgId: org-id
+    resourceType: organization
+    roles: *id001
+  conditions:
+  - type: Ready
+    status: 'True'
+  - type: Synced
+    status: 'True'

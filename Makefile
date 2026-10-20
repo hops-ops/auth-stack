@@ -24,6 +24,10 @@ build:
 # Format: example_path::observed_resources_path (observed_resources_path is optional)
 # api_path is derived from example_path via the api-dir macro (examples/<x>/... → apis/<x>/).
 EXAMPLES := \
+    examples/authorizations/referenced.yaml:: \
+    examples/authorizations/referenced.yaml::tests/test-relationships/observed/authorization.yaml \
+    examples/administrators/referenced.yaml:: \
+    examples/administrators/referenced.yaml::tests/test-relationships/observed/administrator.yaml \
     examples/authstacks/minimal.yaml:: \
     examples/authstacks/standard.yaml:: \
     examples/authstacks/local-colima.yaml:: \

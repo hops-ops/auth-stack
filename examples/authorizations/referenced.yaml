@@ -1,0 +1,18 @@
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+metadata:
+  name: reader
+  namespace: app
+spec:
+  subjectRef:
+    name: alice
+    kind: HumanUser
+  roles:
+  - reader
+  providerConfigRef:
+    name: zitadel
+    kind: ProviderConfig
+  projectRef:
+    name: product
+  organizationRef:
+    name: app-org
+kind: Authorization

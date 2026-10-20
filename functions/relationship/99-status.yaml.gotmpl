@@ -1,0 +1,26 @@
+# code: language=yaml
+---
+apiVersion: auth.hops.ops.com.ai/v1alpha1
+kind: {{ $state.kind }}
+metadata:
+  annotations:
+    gotemplating.fn.crossplane.io/ready: {{ ternary "True" "False" $state.status.ready | quote }}
+status:
+  ready: {{ $state.status.ready }}
+  referencesResolved: {{ $state.status.referencesResolved }}
+  bindingIdentityVerified: {{ $state.status.identityVerified }}
+  bindingId: {{ $state.status.bindingId | quote }}
+---
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+- type: ReferencesResolved
+  status: {{ ternary "True" "False" $state.status.referencesResolved | quote }}
+  reason: {{ $state.status.reason }}
+  message: {{ $state.status.message | quote }}
+  target: Composite
+- type: BindingIdentityVerified
+  status: {{ ternary "True" "False" $state.status.identityVerified | quote }}
+  reason: {{ $state.status.identityReason }}
+  message: "Native observed user and target identities must match before imported assignments can be changed."
+  target: Composite
