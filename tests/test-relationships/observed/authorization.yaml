@@ -1,0 +1,32 @@
+apiVersion: authorization.zitadel.m.crossplane.io/v1alpha1
+kind: Authorization
+metadata:
+  name: reader-authorization
+  namespace: app
+  annotations:
+    crossplane.io/composition-resource-name: binding
+    crossplane.io/external-name: existing-authorization
+spec:
+  providerConfigRef:
+    name: zitadel
+    kind: ProviderConfig
+  managementPolicies:
+  - '*'
+  forProvider:
+    userId: user-id
+    orgId: org-id
+    projectId: project-id
+    roleKeys: &id001
+    - reader
+status:
+  atProvider:
+    id: existing-authorization
+    userId: user-id
+    orgId: org-id
+    projectId: project-id
+    roleKeys: *id001
+  conditions:
+  - type: Ready
+    status: 'True'
+  - type: Synced
+    status: 'True'

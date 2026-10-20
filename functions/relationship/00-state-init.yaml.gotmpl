@@ -1,0 +1,49 @@
+# code: language=yaml
+{{- $xr := getCompositeResource . }}
+{{- $raw := $xr.spec | default dict }}
+{{- $kind := $xr.kind }}
+{{- $name := $xr.metadata.name }}
+{{- $namespace := $xr.metadata.namespace }}
+{{- $binding := $raw.binding | default dict }}
+{{- $nativeAPI := "authorization.zitadel.m.crossplane.io/v1alpha1" }}
+{{- if eq $kind "Administrator" }}
+  {{- $nativeAPI = "internalpermission.zitadel.m.crossplane.io/v1alpha1" }}
+{{- end }}
+{{- $labels := mergeOverwrite (dict "hops.ops.com.ai/managed" "true" (printf "hops.ops.com.ai/auth-%s" (lower $kind)) $name) ($raw.labels | default dict) }}
+{{- $eff := dict
+  "roles" $raw.roles
+  "providerConfigRef" $raw.providerConfigRef
+  "managementPolicies" (get $raw "managementPolicies")
+  "forProvider" ($raw.forProvider | default dict)
+  "externalName" ($binding.externalName | default "")
+  "resourceName" ($binding.resourceName | default (printf "%s-%s" $name (lower $kind)))
+  "labels" $labels
+}}
+{{- if not (hasKey $raw "managementPolicies") }}
+  {{- $_ := set $eff "managementPolicies" (list "*") }}
+{{- end }}
+{{- $refs := dict "subject" (mergeOverwrite (dict "kind" "HumanUser" "apiVersion" "user.zitadel.m.crossplane.io/v1alpha1") (deepCopy $raw.subjectRef)) }}
+{{- $target := $raw }}
+{{- if eq $kind "Administrator" }}
+  {{- $target = $raw.target }}
+{{- end }}
+{{- range $key, $defaults := dict
+    "project" (dict "kind" "ProjectV2" "apiVersion" "project.zitadel.m.crossplane.io/v1alpha1")
+    "organization" (dict "kind" "Organization" "apiVersion" "org.zitadel.m.crossplane.io/v1alpha1")
+    "projectGrant" (dict "kind" "Grant" "apiVersion" "project.zitadel.m.crossplane.io/v1alpha1") }}
+  {{- $ref := get $target (printf "%sRef" $key) | default dict }}
+  {{- if $ref.name }}
+    {{- $_ := set $refs $key (mergeOverwrite $defaults (deepCopy $ref)) }}
+  {{- end }}
+{{- end }}
+{{- range $key, $ref := $refs }}
+  {{- $_ := set $ref "namespace" ($ref.namespace | default $namespace) }}
+  {{- if and (ne $ref.namespace $namespace) (not ($raw.allowCrossNamespaceReferences | default false)) }}
+    {{- fail "cross-namespace references require allowCrossNamespaceReferences: true" }}
+  {{- end }}
+{{- end }}
+{{- $state := dict
+    "name" $name "namespace" $namespace "kind" $kind "nativeAPI" $nativeAPI
+    "spec" (dict "raw" $raw "effective" $eff)
+    "refs" $refs "observed" (dict) "binding" (dict) "status" (dict)
+}}

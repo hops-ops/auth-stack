@@ -1,0 +1,46 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: administrators.auth.hops.ops.com.ai
+spec:
+  compositeTypeRef:
+    apiVersion: auth.hops.ops.com.ai/v1alpha1
+    kind: Administrator
+  mode: Pipeline
+  pipeline:
+  - step: resolve-resource-references
+    functionRef:
+      name: crossplane-contrib-function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: "{{- $xr := getCompositeResource . }}\n{{- $spec := $xr.spec }}\n{{- $target := $spec }}\n{{- if eq $xr.kind\
+          \ \"Administrator\" }}{{- $target = $spec.target }}{{- end }}\n{{- $refs := dict \"subject\" (mergeOverwrite (dict\
+          \ \"kind\" \"HumanUser\" \"apiVersion\" \"user.zitadel.m.crossplane.io/v1alpha1\") (deepCopy $spec.subjectRef))\
+          \ }}\n{{- range $key, $defaults := dict\n  \"project\" (dict \"kind\" \"ProjectV2\" \"apiVersion\" \"project.zitadel.m.crossplane.io/v1alpha1\"\
+          )\n  \"organization\" (dict \"kind\" \"Organization\" \"apiVersion\" \"org.zitadel.m.crossplane.io/v1alpha1\")\n\
+          \  \"projectGrant\" (dict \"kind\" \"Grant\" \"apiVersion\" \"project.zitadel.m.crossplane.io/v1alpha1\") }}\n \
+          \ {{- $ref := get $target (printf \"%sRef\" $key) | default dict }}\n  {{- if $ref.name }}{{- $_ := set $refs $key\
+          \ (mergeOverwrite $defaults (deepCopy $ref)) }}{{- end }}\n{{- end }}\napiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1\n\
+          kind: ExtraResources\nrequirements:\n  {{- range $key, $ref := $refs }}\n  {{ $key }}:\n    apiVersion: {{ $ref.apiVersion\
+          \ | quote }}\n    kind: {{ $ref.kind | quote }}\n    matchName: {{ $ref.name | quote }}\n    namespace: {{ $ref.namespace\
+          \ | default $xr.metadata.namespace | quote }}\n  {{- end }}\n"
+  - step: relationship
+    functionRef:
+      name: hops-ops-auth-stackrelationship
+  - step: auto-ready
+    functionRef:
+      name: crossplane-contrib-function-auto-ready
+  - step: relationship-readiness
+    functionRef:
+      name: crossplane-contrib-function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: "{{- $xr := getCompositeResource . }}\n{{- $desiredStatus := .desired.composite.resource.status | default\
+          \ dict }}\napiVersion: {{ $xr.apiVersion }}\nkind: {{ $xr.kind }}\nmetadata:\n  annotations:\n    gotemplating.fn.crossplane.io/ready:\
+          \ {{ ternary \"True\" \"False\" ($desiredStatus.ready | default false) | quote }}\n"

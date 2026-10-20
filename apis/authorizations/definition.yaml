@@ -1,0 +1,270 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: authorizations.auth.hops.ops.com.ai
+spec:
+  group: auth.hops.ops.com.ai
+  names:
+    kind: Authorization
+    plural: authorizations
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        description: Authorization resolves a human or machine user and owns only its native v2 assignment. References and
+          provider permissions must address the same Zitadel instance. Existing assignments are retained and writes suspended
+          while references are unresolved or change identity.
+        properties:
+          spec:
+            type: object
+            properties:
+              subjectRef:
+                type: object
+                description: Reference to an existing native managed resource. Omit namespace for this XR namespace; an explicit
+                  namespace requires allowCrossNamespaceReferences. IDs are read from observed status, never from Kubernetes
+                  UIDs.
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  namespace:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    minLength: 1
+                    default: HumanUser
+                    enum:
+                    - HumanUser
+                    - MachineUser
+                  apiVersion:
+                    type: string
+                    minLength: 1
+                    default: user.zitadel.m.crossplane.io/v1alpha1
+                    enum:
+                    - user.zitadel.m.crossplane.io/v1alpha1
+                required:
+                - name
+                x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: subjectRef is immutable; create another binding for a different subject/target
+              allowCrossNamespaceReferences:
+                type: boolean
+                default: false
+                description: Explicit opt-in to resolve named native resources in other namespaces. Restrict XR and ProviderConfig
+                  access to trusted authors; this is intent validation, not a replacement for RBAC.
+              roles:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                x-kubernetes-list-type: set
+                minItems: 1
+                description: Complete assignment role set. One XR must own the whole role set for this subject/target tuple;
+                  omitted roles are revoked.
+              providerConfigRef:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    minLength: 1
+                    enum:
+                    - ProviderConfig
+                    - ClusterProviderConfig
+                    default: ProviderConfig
+                required:
+                - name
+                - kind
+                x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: providerConfigRef is immutable; adopt in another XR when changing the provider
+              managementPolicies:
+                type: array
+                items:
+                  type: string
+                  minLength: 1
+                  enum:
+                  - '*'
+                  - Create
+                  - Observe
+                  - Update
+                  - Delete
+                  - LateInitialize
+                default:
+                - '*'
+                x-kubernetes-list-type: set
+              labels:
+                type: object
+                additionalProperties:
+                  type: string
+                x-kubernetes-preserve-unknown-fields: true
+              binding:
+                type: object
+                description: Native assignment naming and import controls. Resource name is immutable. externalName adopts
+                  an existing remote assignment; begin with Observe-only and remove the previous owner without Delete before
+                  enabling writes.
+                properties:
+                  resourceName:
+                    type: string
+                    minLength: 1
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$
+                    x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: resourceName is immutable
+                  externalName:
+                    type: string
+                    minLength: 1
+              forProvider:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+                description: Native provider options. Resolved identity and complete role fields take precedence; use binding.externalName
+                  for import.
+              projectRef:
+                type: object
+                description: Reference to an existing native managed resource. Omit namespace for this XR namespace; an explicit
+                  namespace requires allowCrossNamespaceReferences. IDs are read from observed status, never from Kubernetes
+                  UIDs.
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  namespace:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    minLength: 1
+                    default: ProjectV2
+                    enum:
+                    - ProjectV2
+                    - Project
+                  apiVersion:
+                    type: string
+                    minLength: 1
+                    default: project.zitadel.m.crossplane.io/v1alpha1
+                    enum:
+                    - project.zitadel.m.crossplane.io/v1alpha1
+                required:
+                - name
+                x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: projectRef is immutable; create another binding for a different subject/target
+              organizationRef:
+                type: object
+                description: Reference to an existing native managed resource. Omit namespace for this XR namespace; an explicit
+                  namespace requires allowCrossNamespaceReferences. IDs are read from observed status, never from Kubernetes
+                  UIDs.
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  namespace:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    minLength: 1
+                    default: Organization
+                    enum:
+                    - Organization
+                  apiVersion:
+                    type: string
+                    minLength: 1
+                    default: org.zitadel.m.crossplane.io/v1alpha1
+                    enum:
+                    - org.zitadel.m.crossplane.io/v1alpha1
+                required:
+                - name
+                x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: organizationRef is immutable; create another binding for a different subject/target
+              projectGrantRef:
+                type: object
+                description: Reference to an existing native managed resource. Omit namespace for this XR namespace; an explicit
+                  namespace requires allowCrossNamespaceReferences. IDs are read from observed status, never from Kubernetes
+                  UIDs.
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                  namespace:
+                    type: string
+                    minLength: 1
+                  kind:
+                    type: string
+                    minLength: 1
+                    default: Grant
+                    enum:
+                    - Grant
+                  apiVersion:
+                    type: string
+                    minLength: 1
+                    default: project.zitadel.m.crossplane.io/v1alpha1
+                    enum:
+                    - project.zitadel.m.crossplane.io/v1alpha1
+                required:
+                - name
+                x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: projectGrantRef is immutable; create another binding for a different subject/target
+            required:
+            - subjectRef
+            - roles
+            - providerConfigRef
+            - projectRef
+            - organizationRef
+            x-kubernetes-validations:
+            - rule: '!(has(self.subjectRef)) || !has(self.subjectRef.namespace) || self.allowCrossNamespaceReferences'
+              message: 'an explicit reference namespace requires allowCrossNamespaceReferences: true'
+            - rule: '!(has(self.projectRef)) || !has(self.projectRef.namespace) || self.allowCrossNamespaceReferences'
+              message: 'an explicit reference namespace requires allowCrossNamespaceReferences: true'
+            - rule: '!(has(self.organizationRef)) || !has(self.organizationRef.namespace) || self.allowCrossNamespaceReferences'
+              message: 'an explicit reference namespace requires allowCrossNamespaceReferences: true'
+            - rule: '!(has(self.projectGrantRef)) || !has(self.projectGrantRef.namespace) || self.allowCrossNamespaceReferences'
+              message: 'an explicit reference namespace requires allowCrossNamespaceReferences: true'
+            - rule: '!has(oldSelf.binding) || !has(oldSelf.binding.resourceName) || (has(self.binding) && has(self.binding.resourceName)
+                && self.binding.resourceName == oldSelf.binding.resourceName)'
+              message: binding.resourceName cannot change or be removed once set
+            - rule: has(self.projectGrantRef) == has(oldSelf.projectGrantRef)
+              message: projectGrantRef cannot be added or removed; create another XR for a different delegation contract
+            - rule: has(self.binding) == has(oldSelf.binding) && (!has(self.binding) || self.binding == oldSelf.binding)
+              message: binding naming and import controls must be set at creation and are immutable
+          status:
+            type: object
+            properties:
+              ready:
+                type: boolean
+              bindingId:
+                type: string
+                description: Observed native assignment identity (authorization ID or administrator user/target tuple).
+              referencesResolved:
+                type: boolean
+              conditions:
+                type: array
+                x-kubernetes-list-type: map
+                x-kubernetes-list-map-keys:
+                - type
+                items:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                  required:
+                  - type
+                  - status
+              bindingIdentityVerified:
+                type: boolean
+                description: Whether the observed native user/target identities match the resolved references.
+        required:
+        - spec

@@ -7,3 +7,6 @@ node_modules/
 apis/**/configuration.yaml
 **/aws-creds
 tests/**/secrets/
+
+# Python render-test bytecode
+__pycache__/
