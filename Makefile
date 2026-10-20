@@ -101,8 +101,13 @@ test:
 test-security:
 	python3 -m unittest discover -s tests/security -v
 
-e2e:
-	up test run $(E2E_TESTS) --e2e
+e2e: e2e-relationships
+	@if [ -n "$(E2E_TESTS)" ]; then up test run $(E2E_TESTS) --e2e; fi
+
+.PHONY: e2e-relationships
+e2e-relationships:
+	@test -n "$(ZITADEL_E2E_CONTEXT)" -a -n "$(ZITADEL_E2E_API_URL)" -a -n "$(ZITADEL_E2E_CREDENTIALS_SECRET)" || (echo "Set ZITADEL_E2E_CONTEXT, ZITADEL_E2E_API_URL and ZITADEL_E2E_CREDENTIALS_SECRET"; exit 1)
+	python3 tests/live/test_relationships.py
 
 publish:
 	@if [ -z "$(tag)" ]; then echo "Error: tag is not set. Usage: make publish tag=<version>"; exit 1; fi

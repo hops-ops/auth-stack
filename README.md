@@ -300,9 +300,9 @@ set simultaneously. References and provider selection are immutable; identity
 replacement requires a separate XR/adoption step.
 
 The old HumanUser, MachineUser, Grant and OIDCClient XRDs remain packaged for
-compatibility. Migrate the nine local Grant instances by importing their native
+compatibility. Migrate existing Grant instances by importing their native
 user-grant IDs into Authorization, with environment-owned delegation declared
-separately. Migrate the two active EKS OIDCClient registrations to native client
+separately. Migrate OIDCClient registrations to native client
 resources using their current application IDs and Secret contracts. Do not
 remove these XRDs or the terminating preview objects as part of introducing the
 new APIs. PAT v2 and the Actions v2 groups-claim webhook migration are separate
@@ -311,5 +311,7 @@ provider/runtime work.
 The relationship regression suite is included in `make test-security`. It checks
 both subject kinds, all administrator targets, cross-namespace references,
 missing/replaced references, current readiness, import and deletion locks. Local
-render tests change no cluster resources. Live e2e/adoption verification remains
-a release prerequisite.
+render tests change no cluster resources. The opt-in [live relationship suite](tests/live/README.md)
+(`make e2e-relationships`) exercises the running compositions/controllers and
+checks Zitadel APIs after lifecycle/import/deletion operations. Live verification
+against a containing provider/configuration release remains a release prerequisite.
