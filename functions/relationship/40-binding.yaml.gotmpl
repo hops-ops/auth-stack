@@ -47,7 +47,6 @@ spec:
     kind: {{ $state.kind }}
     resourceRef:
       name: {{ $state.binding.name | quote }}
-      namespace: {{ $state.namespace | quote }}
   {{- end }}
   {{- end }}
 {{- end }}

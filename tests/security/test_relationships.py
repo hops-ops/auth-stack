@@ -133,7 +133,9 @@ class RelationshipTests(unittest.TestCase):
         self.assertEqual(len(usages), 3)
         for usage in usages:
             self.assertEqual(usage['spec']['of']['resourceRef']['namespace'], 'identity')
-            self.assertEqual(usage['spec']['by']['resourceRef']['namespace'], 'app')
+            self.assertEqual(usage['metadata']['namespace'], 'app')
+            # Usage.by is local to the Usage; its schema has no namespace field.
+            self.assertNotIn('namespace', usage['spec']['by']['resourceRef'])
 
     def test_unready_reference_with_id_does_not_remove_assignment(self):
         docs = self.render(self.xr(), self.sources(ready=False), [self.binding()])
@@ -166,7 +168,7 @@ class RelationshipTests(unittest.TestCase):
                  'metadata': {'name': 'binding-delete-authorization-before-subject', 'namespace': 'app',
                               'annotations': {'crossplane.io/composition-resource-name': 'usage-subject'}},
                  'spec': {'replayDeletion': True, 'of': {'apiVersion': USER_API, 'kind': 'HumanUser', 'resourceRef': {'name': 'person', 'namespace': 'app'}},
-                          'by': {'apiVersion': self.binding()['apiVersion'], 'kind': 'Authorization', 'resourceRef': {'name': 'binding-authorization', 'namespace': 'app'}}}}
+                          'by': {'apiVersion': self.binding()['apiVersion'], 'kind': 'Authorization', 'resourceRef': {'name': 'binding-authorization'}}}}
         docs = self.render(self.xr(), self.sources()[1:], [self.binding(), usage])
         self.assertEqual(next(d['spec'] for d in docs if d['kind'] == 'Usage'), usage['spec'])
         self.assert_not_ready(docs)
