@@ -72,7 +72,7 @@ jobs:
       - test
       - instance-observation
       - e2e
-    uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.22.3
+    uses: unbounded-tech/workflow-vnext-tag/.github/workflows/workflow.yaml@v1.22.4
     secrets:
       DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
     with:
