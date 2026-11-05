@@ -131,6 +131,11 @@
 #  `hops auth bootstrap <cluster>` and pulled into K8s Secrets via
 #  ExternalSecret resources composed on the target cluster.
 #
+#  GENERATE (opt-in, `generate: true`): ESO Password generators create the
+#  same two inputs once and a PushSecret writes them to $esoPath only if the
+#  entry does not exist yet, so the PULL flow above finds them with no
+#  manual seeding. Existing entries are never overwritten.
+#
 #  PUSH (operational state): the chart-managed iam-admin PAT is pushed
 #  to AWS SM via a PushSecret composed on the target cluster, so that
 #  downstream consumers anywhere (any cluster, any namespace, any GitOps
@@ -143,6 +148,7 @@
 {{- $esoEnabled := $eso.enabled | default false }}
 {{- $esoStoreName := $eso.secretStoreName | default "hops-aws-secrets-manager" }}
 {{- $esoPath := $eso.secretPath | default "" }}
+{{- $esoGenerate := $eso.generate | default false }}
 {{- $adminPwdSecretName := "zitadel-admin-password" }}
 
 # PushSecret: iam-admin PAT → AWS SM
@@ -284,6 +290,8 @@
     "enabled" $esoEnabled
     "secretStoreName" $esoStoreName
     "secretPath" $esoPath
+    "generate" $esoGenerate
+    "generatedSecretName" "zitadel-generated-inputs"
     "adminPasswordSecretName" $adminPwdSecretName
     "pushCredentials" (dict
       "enabled" $pushCredsEnabled

@@ -389,6 +389,14 @@ spec:
                       AWS SM @ <secretPath>:
                         { "masterkey": "...", "admin-password": "..." }
 
+                  GENERATE (opt-in, `generate: true`): instead of seeding
+                  the entry by hand, AuthStack generates both values with ESO
+                  Password generators and pushes them to `secretPath` only if
+                  that entry does not exist yet (PushSecret
+                  `updatePolicy: IfNotExists`). The PULL flow then reads them
+                  as usual; an existing entry is never overwritten. Works with
+                  any read-write ClusterSecretStore (AWS SM, Vault KV v2).
+
                   PUSH (operational state): when `pushCredentials.enabled`
                   (defaults to the top-level `enabled`), AuthStack composes a
                   PushSecret on the target cluster that publishes the
@@ -412,6 +420,14 @@ spec:
                       The remote secret must be a JSON blob with two string
                       properties: `masterkey` and `admin-password`.
                     type: string
+                  generate:
+                    description: |
+                      Generate `masterkey` (32 alphanumeric characters) and
+                      `admin-password` once and push them to `secretPath` when
+                      that entry does not exist. Requires `enabled` and
+                      `secretPath`. Defaults to false (the entry is seeded by
+                      `hops auth bootstrap`).
+                    type: boolean
                   pushCredentials:
                     description: |
                       Publish the chart-managed iam-admin PAT to AWS SM via
