@@ -932,6 +932,86 @@ _items = [
             ]
         }
     }
+    metav1alpha1.CompositionTest {
+        metadata.name = "external-secrets-generate-composes-generated-inputs"
+        spec = {
+            compositionPath = "apis/authstacks/composition.yaml"
+            xrdPath = "apis/authstacks/definition.yaml"
+            timeoutSeconds = 60
+            validate = False
+            xr = {
+                apiVersion = "hops.ops.com.ai/v1alpha1"
+                kind = "AuthStack"
+                metadata.name = "gen"
+                spec = {
+                    clusterName = "local"
+                    domain = "auth.localhost"
+                    externalSecrets = {
+                        enabled = True
+                        generate = True
+                        secretStoreName = "vault"
+                        secretPath = "local/zitadel"
+                    }
+                    firstInstance.masterkey.secretRef.name = "zitadel-masterkey"
+                    database.embedded.storage.size = "1Gi"
+                }
+            }
+            assertResources = [
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "gen-masterkey-generator"
+                    spec.forProvider.manifest = {
+                        apiVersion = "generators.external-secrets.io/v1alpha1"
+                        kind = "Password"
+                        metadata.name = "zitadel-masterkey"
+                        spec = {length = 32, symbols = 0}
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "gen-admin-password-generator"
+                    spec.forProvider.manifest = {
+                        apiVersion = "generators.external-secrets.io/v1alpha1"
+                        kind = "Password"
+                        metadata.name = "zitadel-admin-password"
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "gen-generated-inputs"
+                    spec.forProvider.manifest = {
+                        apiVersion = "external-secrets.io/v1"
+                        kind = "ExternalSecret"
+                        metadata.name = "zitadel-generated-inputs"
+                        spec.refreshPolicy = "CreatedOnce"
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "gen-generated-inputs-pushsecret"
+                    spec.forProvider.manifest = {
+                        apiVersion = "external-secrets.io/v1alpha1"
+                        kind = "PushSecret"
+                        spec = {
+                            updatePolicy = "IfNotExists"
+                            deletionPolicy = "None"
+                            secretStoreRefs = [{name = "vault", kind = "ClusterSecretStore"}]
+                            data = [{match.remoteRef.remoteKey = "local/zitadel"}]
+                        }
+                    }
+                }
+                {
+                    apiVersion = "kubernetes.m.crossplane.io/v1alpha1"
+                    kind = "Object"
+                    metadata.name = "gen-external-secret-masterkey"
+                }
+            ]
+        }
+    }
 ]
 
 items = _items
