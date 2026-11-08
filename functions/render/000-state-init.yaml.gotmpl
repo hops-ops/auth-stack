@@ -97,7 +97,7 @@
 {{- if not $embStorage.class }}{{- $embStorage = set $embStorage "class" "psql" }}{{- end }}
 {{- $embPostgres := $dbEmbedded.postgresql | default dict }}
 # renovate: datasource=docker depName=library/postgres registryUrl=https://index.docker.io
-{{- if not $embPostgres.version }}{{- $embPostgres = set $embPostgres "version" "17" }}{{- end }}
+{{- if not $embPostgres.version }}{{- $embPostgres = set $embPostgres "version" "18" }}{{- end }}
 {{- $embInstances := 1 }}
 {{- if hasKey $dbEmbedded "instances" }}{{- $embInstances = $dbEmbedded.instances }}{{- end }}
 {{- $embSslMode := $dbEmbedded.sslMode | default "disable" }}
