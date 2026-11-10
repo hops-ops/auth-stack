@@ -13,7 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class GeneratedInputsTests(unittest.TestCase):
+    """Protect durable-input authority and generated-resource ownership."""
+
     def xr(self):
+        """Build a valid fixture with separate durable-input and PAT paths."""
         return {
             'apiVersion': 'hops.ops.com.ai/v1alpha1', 'kind': 'AuthStack',
             'metadata': {'name': 'auth', 'namespace': 'platform'},
@@ -28,6 +31,7 @@ class GeneratedInputsTests(unittest.TestCase):
         }
 
     def render(self, xr):
+        """Exercise the actual composition independently of XRD admission."""
         (ROOT / '.tmp').mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=ROOT / '.tmp') as directory:
             path = Path(directory) / 'xr.json'
@@ -40,11 +44,13 @@ class GeneratedInputsTests(unittest.TestCase):
         return result, docs
 
     def rejected(self, xr, message):
+        """Require a fatal render response identifying the invalid setting."""
         result, _ = self.render(xr)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(message, result.stdout + result.stderr)
 
     def test_generation_rejects_missing_disabled_or_empty_store_settings(self):
+        """Reject generation that cannot persist and pull its candidate inputs."""
         for key, value in [('enabled', None), ('enabled', False),
                            ('secretPath', None), ('secretPath', '')]:
             with self.subTest(key=key, value=value):
@@ -56,6 +62,7 @@ class GeneratedInputsTests(unittest.TestCase):
                 self.rejected(xr, 'requires enabled: true and a non-empty secretPath')
 
     def test_generation_rejects_inline_or_missing_masterkey_reference(self):
+        """Prevent the chart and durable store from using different masterkeys."""
         for masterkey in ({'inline': 'A' * 32}, {},
                           {'inline': 'A' * 32, 'secretRef': {'name': 'masterkey'}}):
             with self.subTest(masterkey=masterkey):
@@ -64,6 +71,7 @@ class GeneratedInputsTests(unittest.TestCase):
                 self.rejected(xr, 'requires firstInstance.masterkey.secretRef.name')
 
     def test_generation_rejects_explicit_and_default_pat_path_collisions(self):
+        """Keep PAT publication from claiming the durable-input entry."""
         explicit = self.xr()
         explicit['spec']['externalSecrets']['pushCredentials'] = {'path': 'staging/zitadel'}
         default = self.xr()
@@ -73,6 +81,7 @@ class GeneratedInputsTests(unittest.TestCase):
                 self.rejected(xr, 'secretPath and pushCredentials.path must differ')
 
     def test_disabled_pat_push_allows_its_unused_path_to_match(self):
+        """Allow an unused PAT path without weakening retained-input behavior."""
         xr = self.xr()
         xr['spec']['externalSecrets']['pushCredentials'] = {
             'enabled': False, 'path': 'staging/zitadel'}
@@ -85,6 +94,7 @@ class GeneratedInputsTests(unittest.TestCase):
         self.assertEqual(pushes[0]['spec']['updatePolicy'], 'IfNotExists')
 
     def test_generated_targets_are_isolated_by_xr_namespace_and_name(self):
+        """Keep generated owners and references isolated across XR identities."""
         names = []
         for namespace, name in [('platform', 'auth'), ('platform', 'other'), ('other', 'auth')]:
             xr = self.xr()
@@ -114,6 +124,7 @@ class GeneratedInputsTests(unittest.TestCase):
                 self.assertTrue(current.isdisjoint(other))
 
     def test_generation_disabled_preserves_inline_masterkey_contract(self):
+        """Preserve the existing inline-key contract when generation is disabled."""
         xr = self.xr()
         xr['spec']['externalSecrets']['generate'] = False
         xr['spec']['firstInstance']['masterkey'] = {'inline': 'A' * 32}
