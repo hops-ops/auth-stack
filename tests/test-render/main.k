@@ -964,7 +964,7 @@ _items = [
                     spec.forProvider.manifest = {
                         apiVersion = "generators.external-secrets.io/v1alpha1"
                         kind = "Password"
-                        metadata.name = "zitadel-masterkey"
+                        metadata.name = "zitadel-d0f9d53eefc4-inputs-masterkey"
                         spec = {length = 32, symbols = 0}
                     }
                 }
@@ -975,7 +975,7 @@ _items = [
                     spec.forProvider.manifest = {
                         apiVersion = "generators.external-secrets.io/v1alpha1"
                         kind = "Password"
-                        metadata.name = "zitadel-admin-password"
+                        metadata.name = "zitadel-d0f9d53eefc4-inputs-admin-password"
                     }
                 }
                 {
@@ -985,8 +985,29 @@ _items = [
                     spec.forProvider.manifest = {
                         apiVersion = "external-secrets.io/v1"
                         kind = "ExternalSecret"
-                        metadata.name = "zitadel-generated-inputs"
-                        spec.refreshPolicy = "CreatedOnce"
+                        metadata.name = "zitadel-d0f9d53eefc4-inputs"
+                        spec = {
+                            refreshPolicy = "CreatedOnce"
+                            target = {name = "zitadel-d0f9d53eefc4-inputs", creationPolicy = "Owner"}
+                            dataFrom = [
+                                {
+                                    sourceRef.generatorRef = {
+                                        apiVersion = "generators.external-secrets.io/v1alpha1"
+                                        kind = "Password"
+                                        name = "zitadel-d0f9d53eefc4-inputs-masterkey"
+                                    }
+                                    rewrite = [{regexp = {source = "^password$", target = "masterkey"}}]
+                                }
+                                {
+                                    sourceRef.generatorRef = {
+                                        apiVersion = "generators.external-secrets.io/v1alpha1"
+                                        kind = "Password"
+                                        name = "zitadel-d0f9d53eefc4-inputs-admin-password"
+                                    }
+                                    rewrite = [{regexp = {source = "^password$", target = "admin-password"}}]
+                                }
+                            ]
+                        }
                     }
                 }
                 {

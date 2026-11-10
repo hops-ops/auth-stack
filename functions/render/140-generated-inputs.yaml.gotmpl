@@ -34,7 +34,7 @@ spec:
       apiVersion: generators.external-secrets.io/v1alpha1
       kind: Password
       metadata:
-        name: zitadel-masterkey
+        name: {{ $eso.generatedSecretName }}-masterkey
         namespace: {{ $state.namespace }}
         labels: {{ $state.labels | toJson }}
       spec:
@@ -62,7 +62,7 @@ spec:
       apiVersion: generators.external-secrets.io/v1alpha1
       kind: Password
       metadata:
-        name: zitadel-admin-password
+        name: {{ $eso.generatedSecretName }}-admin-password
         namespace: {{ $state.namespace }}
         labels: {{ $state.labels | toJson }}
       spec:
@@ -104,7 +104,7 @@ spec:
             generatorRef:
               apiVersion: generators.external-secrets.io/v1alpha1
               kind: Password
-              name: zitadel-masterkey
+              name: {{ $eso.generatedSecretName }}-masterkey
           rewrite:
           - regexp:
               source: "^password$"
@@ -113,7 +113,7 @@ spec:
             generatorRef:
               apiVersion: generators.external-secrets.io/v1alpha1
               kind: Password
-              name: zitadel-admin-password
+              name: {{ $eso.generatedSecretName }}-admin-password
           rewrite:
           - regexp:
               source: "^password$"

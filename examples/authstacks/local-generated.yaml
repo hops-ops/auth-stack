@@ -11,7 +11,8 @@ metadata:
 spec:
   clusterName: local
   domain: auth.localhost
-  externalSecure: true
+  # Plain HTTP locally; enable externalSecure when an edge terminates TLS.
+  externalSecure: false
 
   externalSecrets:
     enabled: true

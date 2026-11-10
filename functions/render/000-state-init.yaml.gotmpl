@@ -160,6 +160,23 @@
 {{- $pushCredsPath := $pushCreds.path | default (printf "push/%s/zitadel-credentials" $clusterName) }}
 {{- $pushCredsProperty := $pushCreds.accessTokenProperty | default "access_token" }}
 
+# Generated candidates must feed the same durable path the chart pulls from.
+# Validate even when ESO is disabled so an opt-in cannot silently do nothing.
+{{- if $esoGenerate }}
+  {{- if not (and $esoEnabled $esoPath) }}
+    {{- fail "spec.externalSecrets.generate requires enabled: true and a non-empty secretPath" }}
+  {{- end }}
+  {{- if ne $mkMode "secretRef" }}
+    {{- fail "spec.externalSecrets.generate requires firstInstance.masterkey.secretRef.name; inline masterkeys cannot use generated inputs" }}
+  {{- end }}
+  {{- if and $pushCredsEnabled (eq $esoPath $pushCredsPath) }}
+    {{- fail "spec.externalSecrets.secretPath and pushCredentials.path must differ when generate is enabled" }}
+  {{- end }}
+{{- end }}
+# Include XR namespace/name and keep target resource names short and stable.
+{{- $generatedIdentity := printf "%s/%s" ($metadata.namespace | default "default") $name | sha256sum | trunc 12 }}
+{{- $generatedSecretName := printf "zitadel-%s-inputs" $generatedIdentity }}
+
 # ==============================================================================
 # Gateway routing
 # ==============================================================================
@@ -291,7 +308,7 @@
     "secretStoreName" $esoStoreName
     "secretPath" $esoPath
     "generate" $esoGenerate
-    "generatedSecretName" "zitadel-generated-inputs"
+    "generatedSecretName" $generatedSecretName
     "adminPasswordSecretName" $adminPwdSecretName
     "pushCredentials" (dict
       "enabled" $pushCredsEnabled

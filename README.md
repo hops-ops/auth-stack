@@ -82,6 +82,22 @@ Two ways to fill that entry:
   `ClusterSecretStore` (AWS SM, Vault KV v2). See
   `examples/authstacks/local-generated.yaml`.
 
+Generation requires `externalSecrets.enabled: true`, a non-empty `secretPath`,
+and `firstInstance.masterkey.secretRef.name`. Inline masterkeys are rejected so
+the chart cannot use a different key from the durable recovery copy. The input
+path must differ from an enabled PAT push path (default
+`push/<clusterName>/zitadel-credentials`). Generated candidate resources are
+named from the AuthStack namespace/name; use one AuthStack per install namespace
+because the chart and final pull-secret names are shared within that namespace.
+
+An existing complete store entry is adopted unchanged. Generation is not key
+rotation or database recovery: if an initialized database loses its durable
+entry, restore the original masterkey before reconciling generated inputs.
+FIRSTINSTANCE passwords do not reset an existing administrator's password.
+The AWS store needs scoped create/read/tag permissions for generated inputs and
+write permissions for PAT publication. With no PushSecret KMS override, ESO
+uses the AWS managed Secrets Manager key, independently of any SOPS KMS key.
+
 Either way the pull `ExternalSecret`s are the only path into
 `zitadel-masterkey` / `zitadel-admin-password`, so the chart always uses what
 the store holds. Losing the masterkey bricks the install: the store entry is
