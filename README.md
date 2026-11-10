@@ -82,6 +82,10 @@ Two ways to fill that entry:
   `ClusterSecretStore` (AWS SM, Vault KV v2). See
   `examples/authstacks/local-generated.yaml`.
 
+The embedded database example requires PSQLStack (declared as a package
+dependency at `^v0.21.1`) and its database runtime. When dependency resolution is
+disabled, install the compatible Configuration/Functions and PSQLStack explicitly.
+
 Generation requires `externalSecrets.enabled: true`, a non-empty `secretPath`,
 and `firstInstance.masterkey.secretRef.name`. Inline masterkeys are rejected so
 the chart cannot use a different key from the durable recovery copy. The input
