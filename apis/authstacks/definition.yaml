@@ -35,6 +35,14 @@ spec:
           spec:
             description: AuthStackSpec defines the desired state.
             type: object
+            x-kubernetes-validations:
+              - rule: >-
+                  !has(self.externalSecrets) || !has(self.externalSecrets.generate) || !self.externalSecrets.generate ||
+                  (has(self.firstInstance) && has(self.firstInstance.masterkey) &&
+                  has(self.firstInstance.masterkey.secretRef) && has(self.firstInstance.masterkey.secretRef.name) &&
+                  size(self.firstInstance.masterkey.secretRef.name) > 0 &&
+                  (!has(self.firstInstance.masterkey.inline) || self.firstInstance.masterkey.inline == ''))
+                message: externalSecrets.generate requires firstInstance.masterkey.secretRef.name and forbids an inline masterkey
             properties:
               systemAPIUsers:
                 description: Optional System API users. Public keys must exist in Secrets in the Zitadel install namespace; private keys belong to API consumers.
@@ -389,6 +397,14 @@ spec:
                       AWS SM @ <secretPath>:
                         { "masterkey": "...", "admin-password": "..." }
 
+                  GENERATE (opt-in, `generate: true`): instead of seeding
+                  the entry by hand, AuthStack generates both values with ESO
+                  Password generators and pushes them to `secretPath` only if
+                  that entry does not exist yet (PushSecret
+                  `updatePolicy: IfNotExists`). The PULL flow then reads them
+                  as usual; an existing entry is never overwritten. Works with
+                  any read-write ClusterSecretStore (AWS SM, Vault KV v2).
+
                   PUSH (operational state): when `pushCredentials.enabled`
                   (defaults to the top-level `enabled`), AuthStack composes a
                   PushSecret on the target cluster that publishes the
@@ -399,6 +415,11 @@ spec:
                   does NOT compose the PC itself. See
                   `examples/consumer-providerconfig.yaml`.
                 type: object
+                x-kubernetes-validations:
+                  - rule: >-
+                      !has(self.generate) || !self.generate ||
+                      (has(self.enabled) && self.enabled && has(self.secretPath) && size(self.secretPath) > 0)
+                    message: externalSecrets.generate requires enabled true and a non-empty secretPath
                 properties:
                   enabled:
                     description: Enable ExternalSecret + PushSecret composition. Defaults to false.
@@ -412,6 +433,15 @@ spec:
                       The remote secret must be a JSON blob with two string
                       properties: `masterkey` and `admin-password`.
                     type: string
+                  generate:
+                    description: |
+                      Generate `masterkey` (32 alphanumeric characters) and
+                      `admin-password` once and push them to `secretPath` when
+                      that entry does not exist. Requires `enabled` and
+                      `secretPath`, and firstInstance.masterkey.secretRef.name.
+                      The input and enabled PAT push paths must differ.
+                      Defaults to false (the entry is seeded by `hops auth bootstrap`).
+                    type: boolean
                   pushCredentials:
                     description: |
                       Publish the chart-managed iam-admin PAT to AWS SM via

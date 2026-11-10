@@ -59,6 +59,54 @@ Exactly one of:
 | `bundled` | Local dev only | Sets `postgresql.enabled=true` so the chart uses its bundled Bitnami subchart. Not for production. |
 | `psqlStack` | Future | Reserved for the platform PSQLStack integration; pending the `PSQLDatabase` XRD. The composition currently rejects this mode. |
 
+## Durable Inputs: masterkey and admin password
+
+Zitadel needs a 32-character `masterkey` and a first admin password before
+its first install. With `externalSecrets.enabled`, AuthStack pulls both from
+one store entry at `externalSecrets.secretPath`:
+
+```text
+<store> @ <secretPath>: { "masterkey": "...", "admin-password": "..." }
+```
+
+Two ways to fill that entry:
+
+- **Seeded** (default): `hops auth bootstrap <cluster>` writes both values,
+  then `hops secrets sync aws` pushes them to AWS Secrets Manager.
+- **Generated** (`externalSecrets.generate: true`): AuthStack composes ESO
+  `Password` generators, an `ExternalSecret` with `refreshPolicy: CreatedOnce`,
+  and a `PushSecret` with `updatePolicy: IfNotExists` that writes both values
+  to `secretPath` only if that entry does not exist yet. An existing entry is
+  never overwritten, so it also works against a pre-seeded store or a rebuilt
+  cluster pointing at a durable one. Works with any read-write
+  `ClusterSecretStore` (AWS SM, Vault KV v2). See
+  `examples/authstacks/local-generated.yaml`.
+
+The embedded database example requires PSQLStack (declared as a package
+dependency at `^v0.21.1`) and its database runtime. When dependency resolution is
+disabled, install the compatible Configuration/Functions and PSQLStack explicitly.
+
+Generation requires `externalSecrets.enabled: true`, a non-empty `secretPath`,
+and `firstInstance.masterkey.secretRef.name`. Inline masterkeys are rejected so
+the chart cannot use a different key from the durable recovery copy. The input
+path must differ from an enabled PAT push path (default
+`push/<clusterName>/zitadel-credentials`). Generated candidate resources are
+named from the AuthStack namespace/name; use one AuthStack per install namespace
+because the chart and final pull-secret names are shared within that namespace.
+
+An existing complete store entry is adopted unchanged. Generation is not key
+rotation or database recovery: if an initialized database loses its durable
+entry, restore the original masterkey before reconciling generated inputs.
+FIRSTINSTANCE passwords do not reset an existing administrator's password.
+The AWS store needs scoped create/read/tag permissions for generated inputs and
+write permissions for PAT publication. With no PushSecret KMS override, ESO
+uses the AWS managed Secrets Manager key, independently of any SOPS KMS key.
+
+Either way the pull `ExternalSecret`s are the only path into
+`zitadel-masterkey` / `zitadel-admin-password`, so the chart always uses what
+the store holds. Losing the masterkey bricks the install: the store entry is
+the copy to back up.
+
 ## Bootstrap & Status Contract
 
 The `zitadel/zitadel` chart's setup hook creates two machine users on first install:

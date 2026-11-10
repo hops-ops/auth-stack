@@ -1,0 +1,161 @@
+# code: language=yaml
+#
+# Generated durable inputs: masterkey + admin-password
+#
+# When `spec.externalSecrets.generate`, ESO generates both values once
+# (`refreshPolicy: CreatedOnce`) into a K8s Secret, and a PushSecret writes
+# that Secret as one JSON object to `externalSecrets.secretPath`, the same
+# shape `hops auth bootstrap` seeds:
+#
+#     <store> @ <secretPath>:
+#       { "masterkey": "...", "admin-password": "..." }
+#
+# `updatePolicy: IfNotExists` never overwrites an existing entry, so an
+# install that already has its inputs (or a rebuilt cluster pointing at a
+# durable store) keeps them. The pull ExternalSecrets (150/151) stay the
+# only path into `zitadel-masterkey` / `zitadel-admin-password`, so the
+# chart always uses what the store holds.
+
+{{- $eso := $state.externalSecrets }}
+
+{{- if and $eso.enabled $eso.secretPath $eso.generate }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-masterkey-generator
+  annotations:
+    {{ setResourceNameAnnotation "masterkey-generator" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: generators.external-secrets.io/v1alpha1
+      kind: Password
+      metadata:
+        name: {{ $eso.generatedSecretName }}-masterkey
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        # Zitadel requires exactly 32 characters.
+        length: 32
+        digits: 8
+        symbols: 0
+        noUpper: false
+        allowRepeat: true
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-admin-password-generator
+  annotations:
+    {{ setResourceNameAnnotation "admin-password-generator" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: generators.external-secrets.io/v1alpha1
+      kind: Password
+      metadata:
+        name: {{ $eso.generatedSecretName }}-admin-password
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        # Zitadel's default policy wants upper, lower, digit and symbol.
+        length: 24
+        digits: 4
+        symbols: 4
+        symbolCharacters: "-_.!"
+        noUpper: false
+        allowRepeat: true
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-generated-inputs
+  annotations:
+    {{ setResourceNameAnnotation "generated-inputs" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: {{ $eso.generatedSecretName }}
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        refreshPolicy: CreatedOnce
+        target:
+          name: {{ $eso.generatedSecretName }}
+          creationPolicy: Owner
+        dataFrom:
+        - sourceRef:
+            generatorRef:
+              apiVersion: generators.external-secrets.io/v1alpha1
+              kind: Password
+              name: {{ $eso.generatedSecretName }}-masterkey
+          rewrite:
+          - regexp:
+              source: "^password$"
+              target: masterkey
+        - sourceRef:
+            generatorRef:
+              apiVersion: generators.external-secrets.io/v1alpha1
+              kind: Password
+              name: {{ $eso.generatedSecretName }}-admin-password
+          rewrite:
+          - regexp:
+              source: "^password$"
+              target: admin-password
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: {{ $state.name }}-generated-inputs-pushsecret
+  annotations:
+    {{ setResourceNameAnnotation "generated-inputs-pushsecret" }}
+  labels: {{ $state.labels | toJson }}
+spec:
+  managementPolicies: {{ $state.managementPolicies | toJson }}
+  forProvider:
+    manifest:
+      apiVersion: external-secrets.io/v1alpha1
+      kind: PushSecret
+      metadata:
+        name: {{ $eso.generatedSecretName }}
+        namespace: {{ $state.namespace }}
+        labels: {{ $state.labels | toJson }}
+      spec:
+        refreshInterval: 1h
+        updatePolicy: IfNotExists
+        # The store entry is the durable copy; never delete it with the XR.
+        deletionPolicy: None
+        secretStoreRefs:
+        - name: {{ $eso.secretStoreName }}
+          kind: ClusterSecretStore
+        selector:
+          secret:
+            name: {{ $eso.generatedSecretName }}
+        # No secretKey: push the whole Secret as one JSON object.
+        data:
+        - match:
+            remoteRef:
+              remoteKey: {{ $eso.secretPath }}
+  providerConfigRef:
+    name: {{ $state.kubernetesProviderConfigRef.name }}
+    kind: {{ $state.kubernetesProviderConfigRef.kind }}
+{{- end }}

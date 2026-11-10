@@ -27,6 +27,7 @@ EXAMPLES := \
     examples/authstacks/minimal.yaml:: \
     examples/authstacks/standard.yaml:: \
     examples/authstacks/local-colima.yaml:: \
+    examples/authstacks/local-generated.yaml:: \
     examples/authstacks/with-smtp.yaml:: \
     examples/authstacks/with-instance.yaml:: \
     examples/machineusers/minimal.yaml:: \

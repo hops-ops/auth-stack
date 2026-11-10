@@ -1,0 +1,32 @@
+# Local-dev manifest with generated inputs: no seeding step.
+# AuthStack generates masterkey + admin-password with ESO Password
+# generators and pushes them to the in-cluster Vault store (KV v2) at
+# `local/zitadel` only if that entry does not exist yet; the pull flow
+# then projects them into `zitadel-masterkey` / `zitadel-admin-password`.
+apiVersion: hops.ops.com.ai/v1alpha1
+kind: AuthStack
+metadata:
+  name: auth
+  namespace: default
+spec:
+  clusterName: local
+  domain: auth.localhost
+  # Plain HTTP locally; enable externalSecure when an edge terminates TLS.
+  externalSecure: false
+
+  externalSecrets:
+    enabled: true
+    generate: true
+    secretStoreName: vault
+    secretPath: local/zitadel
+
+  firstInstance:
+    org: hops
+    masterkey:
+      secretRef:
+        name: zitadel-masterkey
+
+  database:
+    embedded:
+      storage:
+        size: 2Gi
